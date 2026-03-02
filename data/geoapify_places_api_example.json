@@ -1,0 +1,365 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Jason Office Products",
+        "country": "United States",
+        "country_code": "us",
+        "state": "New York",
+        "county": "New York County",
+        "city": "New York",
+        "postcode": "10121",
+        "district": "Koreatown",
+        "suburb": "Manhattan",
+        "street": "West 31st Street",
+        "iso3166_2": "US-NY",
+        "lon": -73.9908519,
+        "lat": 40.7484782,
+        "state_code": "NY",
+        "formatted": "Jason Office Products, West 31st Street, New York, NY 10121, United States of America",
+        "address_line1": "Jason Office Products",
+        "address_line2": "West 31st Street, New York, NY 10121, United States of America",
+        "categories": [
+          "commercial",
+          "commercial.stationery"
+        ],
+        "details": [
+          "details",
+          "details.contact"
+        ],
+        "datasource": {
+          "sourcename": "openstreetmap",
+          "attribution": "© OpenStreetMap contributors",
+          "license": "Open Database License",
+          "url": "https://www.openstreetmap.org/copyright",
+          "raw": {
+            "name": "Jason Office Products",
+            "shop": "stationery",
+            "phone": "+1 212-279-7455",
+            "osm_id": 5401946275,
+            "website": "https://jasonoffice.com/",
+            "osm_type": "n",
+            "opening_hours": "Mo-Fr 07:00-18:00"
+          }
+        },
+        "website": "https://jasonoffice.com/",
+        "opening_hours": "Mo-Fr 07:00-18:00",
+        "contact": {
+          "phone": "+1 212-279-7455"
+        },
+        "commercial": {
+          "type": "stationery"
+        },
+        "place_id": "517c6b161e6a7f52c059082a3822ce5f4440f00103f901a328fb41010000009203154a61736f6e204f66666963652050726f6475637473"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.9908519,
+          40.74847820036308
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Flynn's Office Solutions",
+        "country": "United States",
+        "country_code": "us",
+        "state": "New York",
+        "county": "New York County",
+        "city": "New York",
+        "postcode": "10001",
+        "district": "NoMad",
+        "suburb": "Manhattan",
+        "street": "West 30th Street",
+        "housenumber": "115",
+        "iso3166_2": "US-NY",
+        "lon": -73.9904315,
+        "lat": 40.7477288,
+        "state_code": "NY",
+        "formatted": "Flynn's Office Solutions, 115 West 30th Street, New York, NY 10001, United States of America",
+        "address_line1": "Flynn's Office Solutions",
+        "address_line2": "115 West 30th Street, New York, NY 10001, United States of America",
+        "categories": [
+          "commercial",
+          "commercial.stationery"
+        ],
+        "details": [
+          "details",
+          "details.contact"
+        ],
+        "datasource": {
+          "sourcename": "openstreetmap",
+          "attribution": "© OpenStreetMap contributors",
+          "license": "Open Database License",
+          "url": "https://www.openstreetmap.org/copyright",
+          "raw": {
+            "name": "Flynn's Office Solutions",
+            "shop": "stationery",
+            "phone": "+1-212-339-8700",
+            "osm_id": 2703449222,
+            "website": "https://www.flynns.com/",
+            "osm_type": "n",
+            "addr:city": "New York",
+            "addr:unit": "Suite 411",
+            "addr:state": "NY",
+            "addr:street": "West 30th Street",
+            "addr:postcode": 10001,
+            "opening_hours": "Mo-Fr 09:00-17:00; Sa off; Su off",
+            "addr:housenumber": 115
+          }
+        },
+        "website": "https://www.flynns.com/",
+        "opening_hours": "Mo-Fr 09:00-17:00; Sa off; Su off",
+        "contact": {
+          "phone": "+1-212-339-8700"
+        },
+        "commercial": {
+          "type": "stationery"
+        },
+        "place_id": "51685bcd3a637f52c05910ebcb93b55f4440f00103f901865c23a100000000920318466c796e6e2773204f666669636520536f6c7574696f6e73"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.9904315,
+          40.74772880036301
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Staples",
+        "ref": "0215",
+        "country": "United States",
+        "country_code": "us",
+        "state": "New York",
+        "county": "New York County",
+        "city": "New York",
+        "postcode": "10011",
+        "district": "Chelsea",
+        "suburb": "Manhattan",
+        "street": "6th Avenue",
+        "housenumber": "641",
+        "iso3166_2": "US-NY",
+        "lon": -73.9944619,
+        "lat": 40.740998,
+        "state_code": "NY",
+        "formatted": "Staples, 641 6th Avenue, New York, NY 10011, United States of America",
+        "address_line1": "Staples",
+        "address_line2": "641 6th Avenue, New York, NY 10011, United States of America",
+        "categories": [
+          "commercial",
+          "commercial.stationery"
+        ],
+        "details": [
+          "details",
+          "details.contact"
+        ],
+        "datasource": {
+          "sourcename": "openstreetmap",
+          "attribution": "© OpenStreetMap contributors",
+          "license": "Open Database License",
+          "url": "https://www.openstreetmap.org/copyright",
+          "raw": {
+            "fax": "+1 212-463-7624",
+            "ref": "0215",
+            "name": "Staples",
+            "shop": "stationery",
+            "brand": "Staples",
+            "phone": "+1 212-462-2959",
+            "branch": "6th Ave at 20th St",
+            "osm_id": 3859061783,
+            "website": "https://stores.staples.com/ny/new-york/641-6th-ave",
+            "osm_type": "n",
+            "fixme:atp": "check if location still exists; no corresponding ATP location found",
+            "addr:street": "6th Avenue",
+            "addr:postcode": 10011,
+            "opening_hours": "Mo-Fr 07:00-20:00; Sa 09:00-18:00; Su 12:00-18:00",
+            "brand:wikidata": "Q785943",
+            "addr:housenumber": 641
+          }
+        },
+        "website": "https://stores.staples.com/ny/new-york/641-6th-ave",
+        "opening_hours": "Mo-Fr 07:00-20:00; Sa 09:00-18:00; Su 12:00-18:00",
+        "brand": "Staples",
+        "brand_details": {
+          "wikidata": "Q785943"
+        },
+        "branch": "6th Ave at 20th St",
+        "contact": {
+          "phone": "+1 212-462-2959",
+          "fax": "+1 212-463-7624"
+        },
+        "commercial": {
+          "type": "stationery"
+        },
+        "place_id": "518d678643a57f52c05980fac005d95e4440f00103f901179c04e600000000920307537461706c6573"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.99446189999999,
+          40.7409980003622
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Staples",
+        "ref": "0953",
+        "country": "United States",
+        "country_code": "us",
+        "state": "New York",
+        "county": "New York County",
+        "city": "New York",
+        "postcode": "10003",
+        "district": "Union Square",
+        "suburb": "Manhattan",
+        "street": "Union Square West",
+        "housenumber": "5",
+        "iso3166_2": "US-NY",
+        "lon": -73.9916228,
+        "lat": 40.735602,
+        "state_code": "NY",
+        "formatted": "Staples, 5 Union Square West, New York, NY 10003, United States of America",
+        "address_line1": "Staples",
+        "address_line2": "5 Union Square West, New York, NY 10003, United States of America",
+        "categories": [
+          "commercial",
+          "commercial.stationery"
+        ],
+        "details": [
+          "details",
+          "details.contact"
+        ],
+        "datasource": {
+          "sourcename": "openstreetmap",
+          "attribution": "© OpenStreetMap contributors",
+          "license": "Open Database License",
+          "url": "https://www.openstreetmap.org/copyright",
+          "raw": {
+            "fax": "+1 212-929-5457",
+            "ref": "0953",
+            "name": "Staples",
+            "shop": "stationery",
+            "brand": "Staples",
+            "phone": "+1 212-929-6323",
+            "branch": "Union Square West",
+            "osm_id": 4998806132,
+            "website": "https://stores.staples.com/ny/new-york/5-union-square-west",
+            "osm_type": "n",
+            "addr:city": "New York",
+            "addr:state": "NY",
+            "check_date": "2023-10-21",
+            "addr:street": "Union Square West",
+            "addr:postcode": 10003,
+            "opening_hours": "Mo 07:00-24:00; Tu-Fr 00:00-24:00; Sa 00:00-21:00; Su 10:00-19:00",
+            "brand:wikidata": "Q785943",
+            "addr:housenumber": 5
+          }
+        },
+        "website": "https://stores.staples.com/ny/new-york/5-union-square-west",
+        "opening_hours": "Mo 07:00-24:00; Tu-Fr 00:00-24:00; Sa 00:00-21:00; Su 10:00-19:00",
+        "brand": "Staples",
+        "brand_details": {
+          "wikidata": "Q785943"
+        },
+        "branch": "Union Square West",
+        "contact": {
+          "phone": "+1 212-929-6323",
+          "fax": "+1 212-929-5457"
+        },
+        "commercial": {
+          "type": "stationery"
+        },
+        "place_id": "51f3fd79bf767f52c0596736d334285e4440f00103f90174baf32901000000920307537461706c6573"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.9916228,
+          40.735602000361546
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Paper Source",
+        "country": "United States",
+        "country_code": "us",
+        "state": "New York",
+        "county": "New York County",
+        "city": "New York",
+        "postcode": "10012",
+        "district": "SoHo",
+        "suburb": "Manhattan",
+        "street": "Spring Street",
+        "housenumber": "83",
+        "iso3166_2": "US-NY",
+        "lon": -73.9981918,
+        "lat": 40.7228556,
+        "state_code": "NY",
+        "formatted": "Paper Source, 83 Spring Street, New York, NY 10012, United States of America",
+        "address_line1": "Paper Source",
+        "address_line2": "83 Spring Street, New York, NY 10012, United States of America",
+        "categories": [
+          "commercial",
+          "commercial.stationery"
+        ],
+        "details": [
+          "details",
+          "details.contact"
+        ],
+        "datasource": {
+          "sourcename": "openstreetmap",
+          "attribution": "© OpenStreetMap contributors",
+          "license": "Open Database License",
+          "url": "https://www.openstreetmap.org/copyright",
+          "raw": {
+            "name": "Paper Source",
+            "shop": "stationery",
+            "brand": "Paper Source",
+            "phone": "+1-646-484-5764",
+            "osm_id": 8378028017,
+            "website": "https://store-locator.papersource.com/locations/store/ny-nyc-soho",
+            "osm_type": "n",
+            "addr:city": "New York",
+            "addr:state": "NY",
+            "addr:street": "Spring Street",
+            "addr:postcode": 10012,
+            "opening_hours": "Mo-Sa 10:00-19:00; Su 11:00-18:00",
+            "brand:wikidata": "Q25000269",
+            "addr:housenumber": 83
+          }
+        },
+        "website": "https://store-locator.papersource.com/locations/store/ny-nyc-soho",
+        "opening_hours": "Mo-Sa 10:00-19:00; Su 11:00-18:00",
+        "brand": "Paper Source",
+        "brand_details": {
+          "wikidata": "Q25000269"
+        },
+        "contact": {
+          "phone": "+1-646-484-5764"
+        },
+        "commercial": {
+          "type": "stationery"
+        },
+        "place_id": "51aa08dc5fe27f52c0596ea34588865c4440f00103f901f18f5ef30100000092030c506170657220536f75726365"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -73.9981918,
+          40.722855600360035
+        ]
+      }
+    }
+  ]
+}
