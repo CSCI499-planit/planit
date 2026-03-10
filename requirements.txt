@@ -1,0 +1,9 @@
+numpy
+pandas
+polars
+scikit-learn
+joblib
+requests
+tensorflow
+tensorflow-recommenders
+ortools
