@@ -14,9 +14,9 @@ from ml.data.preprocess import PlaceRecord
 logger = logging.getLogger(__name__)
 
 
-# Yelp attributes can contain stringified dicts like "{'free': True, 'paid': False}"
+# Place attributes can contain stringified dicts like "{'free': True, 'paid': False}"
 # Flattens them to "WiFi.free": True so feature extraction can read them directly
-def _parse_yelp_attributes(attrs: dict | None) -> dict[str, Any]:
+def _parse_place_attributes(attrs: dict | None) -> dict[str, Any]:
     if not attrs:
         return {}
     flat: dict[str, Any] = {}
@@ -34,8 +34,8 @@ def _parse_yelp_attributes(attrs: dict | None) -> dict[str, Any]:
     return flat
 
 
-# Pulls price level from Yelp's RestaurantsPriceRange2 attribute
-def _parse_yelp_price_level(attrs: dict | None) -> int | None:
+# Pulls price level from the RestaurantsPriceRange2 attribute
+def _parse_price_level(attrs: dict | None) -> int | None:
     if not attrs:
         return None
     raw = attrs.get("RestaurantsPriceRange2")
@@ -48,7 +48,7 @@ def _parse_yelp_price_level(attrs: dict | None) -> int | None:
         return None
 
 
-# Derives boolean flags from an OSM / Yelp hours string
+# Derives boolean flags from an OSM hours string
 def _parse_opening_hours_features(hours_str: str | None) -> dict[str, bool]:
     features = {
         "opens_late":     False,   # closes at or after 22:00
@@ -117,7 +117,7 @@ class PlaceFeatureExtractor:
     ]
 
     # which category substrings count toward each category flag
-    # works for both Geoapify ("catering.restaurant") and Yelp ("restaurants")
+    # works for Geoapify ("catering.restaurant") and Foursquare category names
     _CAT_GROUPS: dict[str, list[str]] = {
         "cat_food_drink": ["catering", "restaurants", "food", "coffee"],
         "cat_outdoor":    ["leisure", "natural", "beaches", "parks", "hiking"],
@@ -134,7 +134,7 @@ class PlaceFeatureExtractor:
 
     def extract(self, place: PlaceRecord) -> np.ndarray:
         categories = [c.lower() for c in (place.get("categories") or [])]
-        attrs      = _parse_yelp_attributes(place.get("attributes"))
+        attrs      = _parse_place_attributes(place.get("attributes"))
         hours_feat = _parse_opening_hours_features(place.get("hours"))
 
         vec: list[float] = []
@@ -145,14 +145,13 @@ class PlaceFeatureExtractor:
             vec.append(float(flag))
 
         # price (0 = unknown), rating (0 = unknown), log review count
-        price = place.get("price_level") or _parse_yelp_price_level(place.get("attributes"))
+        price = place.get("price_level") or _parse_price_level(place.get("attributes"))
         vec.append(float(price) if price is not None else 0.0)
         rating = place.get("rating")
         vec.append(float(rating) if rating is not None else 0.0)
         rc = place.get("review_count")
         vec.append(math.log1p(rc) if rc is not None else 0.0)
 
-        # Yelp attribute flags — keys match Yelp's attribute naming
         def _bool(key: str) -> float:
             val = attrs.get(key)
             return 1.0 if val is not None and str(val).lower() in ("true", "1", "yes") else 0.0
@@ -195,8 +194,8 @@ class PlaceFeatureExtractor:
 def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
     labels: dict[str, int] = {tag: 0 for tag in PLACE_TAGS}
     categories = [c.lower() for c in (place.get("categories") or [])]
-    attrs      = _parse_yelp_attributes(place.get("attributes"))
-    price      = place.get("price_level") or _parse_yelp_price_level(place.get("attributes"))
+    attrs      = _parse_place_attributes(place.get("attributes"))
+    price      = place.get("price_level") or _parse_price_level(place.get("attributes"))
     rating     = place.get("rating") or 0.0
     hours_feat = _parse_opening_hours_features(place.get("hours"))
 

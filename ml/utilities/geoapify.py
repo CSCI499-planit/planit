@@ -27,7 +27,6 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
     categories: list[str] = [c.lower() for c in (props.get("categories") or [])]
 
     # pull any useful attributes from Geoapify sub-objects into the shared attributes dict
-    # keys are intentionally matched to Yelp naming so the feature extractor works on both sources
     attrs: dict[str, Any] = {}
     if props.get("catering"):
         c = props["catering"]
@@ -70,7 +69,6 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
 
 
 # Parses a full Geoapify FeatureCollection JSON response into a list of PlaceRecords.
-# The backend teammate can call this after getting a Geoapify response before passing to the ML pipeline.
 def parse_geoapify_response(response: dict[str, Any]) -> list[PlaceRecord]:
     records: list[PlaceRecord] = []
     skipped = 0

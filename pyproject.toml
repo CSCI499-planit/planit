@@ -20,6 +20,12 @@ dependencies = [
 
     # HTTP (backend uses this; ML parser doesn't call HTTP directly)
     "requests>=2.31",
+
+    # dataset download from Google Drive
+    "gdown>=5.1",
+
+    # sparse matrices used by Stage 2 (also a scikit-learn dep, but explicit is safer)
+    "scipy>=1.12",
 ]
 
 [project.optional-dependencies]
