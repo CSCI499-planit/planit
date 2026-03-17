@@ -1,7 +1,6 @@
 # PlanIt — ML Pipeline
 
 **Team:** Ahmed Abdelsalam, Dennes Lopez, Sifatun Noor, Kripamoye Biswas
-**Course:** CSCI 49900
 
 ---
 
