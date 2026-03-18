@@ -1,6 +1,9 @@
 .venv
 .env
-data/yelp*__pycache__/
+data/yelp*
+data/foursquare/*.txt
+data/foursquare/*.zip
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
