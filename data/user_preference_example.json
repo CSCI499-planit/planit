@@ -42,8 +42,8 @@
         "exploration_score":"3",
         "popularity_weight":"2",
         "cuisines_prefrences":["Asian"],
-        "dietary_restriction":["walking", "public transit"],
-        "travel_mode":[],
+        "dietary_restriction":[],
+        "travel_mode":["walking", "public transit"],
         "max_travel_minutes":"10-20",
         "itinerary_pace":"4"
     },
