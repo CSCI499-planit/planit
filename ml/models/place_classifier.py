@@ -14,9 +14,9 @@ from ml.data.preprocess import PlaceRecord
 logger = logging.getLogger(__name__)
 
 
-# Place attributes can contain stringified dicts like "{'free': True, 'paid': False}"
-# Flattens them to "WiFi.free": True so feature extraction can read them directly
 def _parse_place_attributes(attrs: dict | None) -> dict[str, Any]:
+    # Geoapify sometimes returns nested dicts as stringified Python dicts
+    # e.g. "{'free': True, 'paid': False}" — flatten to "WiFi.free": True
     if not attrs:
         return {}
     flat: dict[str, Any] = {}
@@ -34,8 +34,8 @@ def _parse_place_attributes(attrs: dict | None) -> dict[str, Any]:
     return flat
 
 
-# Pulls price level from the RestaurantsPriceRange2 attribute
 def _parse_price_level(attrs: dict | None) -> int | None:
+    # pull price level from the Yelp-style RestaurantsPriceRange2 attribute
     if not attrs:
         return None
     raw = attrs.get("RestaurantsPriceRange2")
@@ -48,12 +48,12 @@ def _parse_price_level(attrs: dict | None) -> int | None:
         return None
 
 
-# Derives boolean flags from an OSM hours string
 def _parse_opening_hours_features(hours_str: str | None) -> dict[str, bool]:
+    # derive boolean flags from an OSM hours string — used in both tagging and scoring
     features = {
         "opens_late":     False,   # closes at or after 22:00
         "opens_early":    False,   # opens at or before 08:00
-        "open_weekend":   False,   # open Sat or Sun
+        "open_weekend":   False,
         "is_always_open": False,   # 24/7
     }
     if not hours_str:
@@ -79,7 +79,7 @@ def _parse_opening_hours_features(hours_str: str | None) -> dict[str, bool]:
     return features
 
 
-# 15 contextual tags assigned to each place
+# 15 contextual tags — these are the vocabulary for everything downstream
 PLACE_TAGS: list[str] = [
     "family_friendly",  # good for kids / families
     "romantic",         # date spots, intimate settings
@@ -102,11 +102,12 @@ TAG_INDEX: dict[str, int] = {tag: i for i, tag in enumerate(PLACE_TAGS)}
 
 
 # ---------------------------------------------------------------------------
-# Feature extraction
+# Feature extraction — turns a PlaceRecord into a numeric vector for the
+# random forest classifier
 # ---------------------------------------------------------------------------
 
 class PlaceFeatureExtractor:
-    # 23 features total: 9 category flags, 3 numeric, 7 attribute flags, 4 hours flags
+    # 23 features: 9 category flags, 3 numeric, 7 attribute flags, 4 hours flags
     FEATURE_NAMES: list[str] = [
         "cat_food_drink", "cat_outdoor", "cat_cultural", "cat_nightlife",
         "cat_shopping", "cat_wellness", "cat_tourism", "cat_sport", "cat_nature",
@@ -116,8 +117,8 @@ class PlaceFeatureExtractor:
         "hours_late", "hours_early", "hours_weekend", "hours_always",
     ]
 
-    # which category substrings count toward each category flag
-    # works for Geoapify ("catering.restaurant") and Foursquare category names
+    # category string patterns that count toward each category flag
+    # works for both Geoapify dot-notation ("catering.restaurant") and Foursquare names
     _CAT_GROUPS: dict[str, list[str]] = {
         "cat_food_drink": ["catering", "restaurants", "food", "coffee"],
         "cat_outdoor":    ["leisure", "natural", "beaches", "parks", "hiking"],
@@ -139,7 +140,7 @@ class PlaceFeatureExtractor:
 
         vec: list[float] = []
 
-        # category flags — 1 if any category string matches any pattern in the group
+        # category flags — 1 if any category matches any pattern in the group
         for patterns in self._CAT_GROUPS.values():
             flag = any(any(pat in cat for cat in categories) for pat in patterns)
             vec.append(float(flag))
@@ -163,7 +164,7 @@ class PlaceFeatureExtractor:
         vec.append(_bool("RestaurantsGoodForGroups"))
         vec.append(_bool("GoodForMeal.latenight"))
 
-        # alcohol: 0 = none, 0.5 = beer/wine, 1.0 = full bar
+        # alcohol: 0 = none, 0.5 = beer/wine only, 1.0 = full bar
         alcohol = str(attrs.get("Alcohol", "")).lower()
         if "full_bar" in alcohol:
             vec.append(1.0)
@@ -192,7 +193,7 @@ class PlaceFeatureExtractor:
 # ---------------------------------------------------------------------------
 
 def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
-    labels: dict[str, int] = {tag: 0 for tag in PLACE_TAGS}
+    labels     = {tag: 0 for tag in PLACE_TAGS}
     categories = [c.lower() for c in (place.get("categories") or [])]
     attrs      = _parse_place_attributes(place.get("attributes"))
     price      = place.get("price_level") or _parse_price_level(place.get("attributes"))
@@ -276,7 +277,7 @@ def auto_label_places(places: list[PlaceRecord]) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Classifier
+# Classifier — wraps a random forest for multi-label tag prediction
 # ---------------------------------------------------------------------------
 
 class PlaceTagClassifier:
@@ -318,7 +319,7 @@ class PlaceTagClassifier:
         self._is_fitted = True
 
     def train_from_auto_labels(self, places: list[PlaceRecord]) -> None:
-        # use rule-based labels to bootstrap training before real labels are ready
+        # bootstrap training using rule-based labels before real labels are ready
         labelled    = auto_label_places(places)
         label_dicts = [r["labels"] for r in labelled]
         self.train(places, label_dicts)
@@ -333,7 +334,7 @@ class PlaceTagClassifier:
         ]
 
     def predict_proba(self, places: list[PlaceRecord]) -> list[dict[str, float]]:
-        # returns per-tag confidence scores, useful for ranking / soft filtering
+        # per-tag confidence scores — useful for soft filtering or ranking
         self._check_fitted()
         proba_list = self.model.predict_proba(self.extractor.extract_batch(places))
         return [
@@ -342,7 +343,7 @@ class PlaceTagClassifier:
         ]
 
     def tag_places(self, places: list[PlaceRecord]) -> list[PlaceRecord]:
-        # main entry point for the backend — returns new dicts with "tags" populated
+        # main entry point — returns new dicts with "tags" filled in
         tag_lists = self.predict(places)
         return [{**p, "tags": tags} for p, tags in zip(places, tag_lists)]
 
@@ -358,16 +359,16 @@ class PlaceTagClassifier:
         }
 
     def save(self, path: str | Path) -> None:
-        import joblib  # type: ignore[import-untyped]
+        import joblib
         self._check_fitted()
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         joblib.dump({"model": self.model, "tags": PLACE_TAGS}, path)
 
     @classmethod
     def load(cls, path: str | Path) -> "PlaceTagClassifier":
-        import joblib  # type: ignore[import-untyped]
-        data       = joblib.load(path)
-        obj        = cls.__new__(cls)
+        import joblib
+        data           = joblib.load(path)
+        obj            = cls.__new__(cls)
         obj.model      = data["model"]
         obj.extractor  = PlaceFeatureExtractor()
         obj._is_fitted = True

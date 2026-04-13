@@ -86,37 +86,50 @@ def process_yelp(data:pd.DataFrame)->pd.DataFrame:
 def create_mock_user_preference() -> dict:
     """
         create mock dictionary of user preference form
+        values must match the ML pipeline's UserPreference TypedDict exactly —
+        wrong keys or values are silently ignored during embedding
     """
-    use_case = ['local','daytrip','travel','mixed']
-    group_type = ['solo','couple','friends','family','mixed']
-    daily_budget_tier = ['1','2','3','4']
-    trip_budget_tier = ['1','2','3','4']
-    preferred_tags = ['outdoor','cultural','food and drink','nightlife','shopping',
-                    'wellness','historical','scenic','adventurous','family friendly',
-                    'romantic','pet friendly','upscale','budget friendly']
-    exploration_score = ['1','2','3','4','5']
-    popularity_weight = ['1','2','3','4','5']
-    cuisine_prefrences = ['American','Italian','East Asian','Southeast Asian',
-                        'South Asian','Mexican','Mediterranean','Vegetarian','Seafood']
-    dietary_restrictions = ['vegetarian','vegan','gluten-free','halal','kosher',
-                            'nut allergy','dairy-free','none']
-    travel_mode = ['walking','biking','public transit','driving']
-    max_travel_minutes = ['< 10 minutes','10-20 minutes','20-40 minutes','> 40 minutes']
-    itinerary_pace =['packed','balanced','relaxed']
+    use_case = ['local', 'daytrip', 'travel', 'mixed']
+    party_type = ['solo', 'couple', 'friends', 'family', 'mixed']
+    daily_budget_tier = [1, 2, 3, 4]
+    trip_budget_tier  = [1, 2, 3, 4]
+    # underscored to match the place tag enum in place_classifier.py
+    preferred_tags = [
+        'outdoor', 'cultural', 'food_and_drink', 'nightlife', 'shopping',
+        'wellness', 'historical', 'scenic', 'adventurous', 'family_friendly',
+        'romantic', 'pet_friendly', 'upscale', 'budget_friendly', 'quick_visit',
+    ]
+    exploration_score = [1, 2, 3, 4, 5]
+    popularity_weight = [1, 2, 3, 4, 5]
+    # lowercase to match ALL_CUISINES in user_profiler.py
+    cuisine_preferences = [
+        'american', 'italian', 'east asian', 'southeast asian',
+        'mexican', 'indian', 'mediterranean', 'vegetarian', 'seafood',
+    ]
+    # underscored to match ALL_DIETARY in user_profiler.py
+    dietary_restrictions = [
+        'vegetarian', 'vegan', 'gluten_free', 'halal',
+        'kosher', 'nut_allergy', 'dairy_free',
+    ]
+    # short codes to match ALL_TRAVEL_MODES in user_profiler.py
+    travel_mode = ['walk', 'bike', 'transit', 'drive']
+    max_travel_minutes = ['< 10', '10-20', '20-40', '> 40']
+    itinerary_pace = ['packed', 'balanced', 'relaxed']
+
     user_preference = {}
-    user_preference['user_id'] = random.randint(1,100000)
-    user_preference['use_case'] = random.choice(use_case)
-    user_preference['group_type'] = random.choice(group_type)
-    user_preference['daily_budget_tier'] = random.choice(daily_budget_tier)
-    user_preference['trip_budget_tier'] = random.choice(trip_budget_tier)
-    user_preference['preferred_tags'] = random.sample(preferred_tags,random.randint(1,3))
-    user_preference['exploration_score'] = random.choice(exploration_score)
-    user_preference['popularity_weight'] = random.choice(popularity_weight)
-    user_preference['cuisine_prefrences'] = random.sample(cuisine_prefrences,random.randint(1,3))
-    user_preference['dietary_restrictions']= random.sample(dietary_restrictions,random.randint(1,3))
-    user_preference['travel_mode'] = random.sample(travel_mode,random.randint(1,2))
-    user_preference['max_travel_minutes'] = random.choice(max_travel_minutes)
-    user_preference['itinerary_pace'] = random.choice(itinerary_pace)
+    user_preference['user_id']              = str(random.randint(1, 100000))
+    user_preference['use_case']             = random.choice(use_case)
+    user_preference['party_type']           = random.choice(party_type)
+    user_preference['daily_budget_tier']    = random.choice(daily_budget_tier)
+    user_preference['trip_budget_tier']     = random.choice(trip_budget_tier)
+    user_preference['preferred_tags']       = random.sample(preferred_tags, random.randint(1, 3))
+    user_preference['exploration_score']    = random.choice(exploration_score)
+    user_preference['popularity_weight']    = random.choice(popularity_weight)
+    user_preference['cuisine_preferences']  = random.sample(cuisine_preferences, random.randint(1, 3))
+    user_preference['dietary_restrictions'] = random.sample(dietary_restrictions, random.randint(0, 2))
+    user_preference['travel_mode']          = random.sample(travel_mode, random.randint(1, 2))
+    user_preference['max_travel_minutes']   = random.choice(max_travel_minutes)
+    user_preference['itinerary_pace']       = random.choice(itinerary_pace)
 
     return user_preference
 

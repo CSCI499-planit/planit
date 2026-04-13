@@ -10,10 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Stage 1 schema — places entering the ML pipeline
+# Stage 1 schema — every data source gets normalised to this before the ML
+# pipeline touches it. adding a source field so we can trace where a place
+# came from if something looks off in the recommendations.
 # ---------------------------------------------------------------------------
 
-# Shared schema — every data source must be mapped to this before entering the ML pipeline.
 class PlaceRecord(TypedDict, total=False):
     place_id:      str
     name:          str
@@ -27,83 +28,64 @@ class PlaceRecord(TypedDict, total=False):
     street:        Optional[str]
     suburb:        Optional[str]
     district:      Optional[str]
-    # lowercase, e.g. ["catering.restaurant"] or ["restaurants", "italian"]
-    categories:    list[str]
+    categories:    list[str]      # raw category strings from the source API
     price_level:   Optional[int]  # 1–4
     rating:        Optional[float]
     review_count:  Optional[int]
     hours:         Optional[str]
-    # place attribute extras (GoodForKids, DogsAllowed, etc.)
-    attributes:    Optional[dict[str, Any]]
-    tags:          Optional[list[str]]       # filled in by Stage 1 classifier
+    attributes:    Optional[dict[str, Any]]   # GoodForKids, DogsAllowed, etc.
+    tags:          Optional[list[str]]        # filled in by Stage 1
 
 
 # ---------------------------------------------------------------------------
-# Stage 2 schemas — user preferences (survey) and visit history
+# Stage 2 schemas — user preferences (from the survey) and visit history
 # ---------------------------------------------------------------------------
 
 class UserPreference(TypedDict, total=False):
-    """User survey response collected during user onboarding.
-
-    Field values correspond exactly to the preference form options so the
-    backend can store survey answers verbatim and pass them straight here.
-    """
+    # direct mapping of the onboarding survey — backend stores verbatim and
+    # passes it straight here, so field names and values must match exactly
     user_id:              str
 
-    # Section 1 – Context
+    # Section 1 — Context
     use_case:             str          # "local" | "daytrip" | "travel" | "mixed"
-    # "solo" | "couple" | "friends" | "family" | "mixed"
-    part_type:            str
+    party_type:           str          # "solo" | "couple" | "friends" | "family" | "mixed"
 
-    # Section 2 – Budget
-    # 1–4  (maps price_level; 1=free/budget, 4=luxury)
+    # Section 2 — Budget  (1 = free/budget, 4 = luxury)
     daily_budget_tier:    int
-    # 1–4 or None ("not applicable" for local users)
-    trip_budget_tier:     Optional[int]
+    trip_budget_tier:     Optional[int]   # None for local users ("not applicable")
 
-    # Section 3 – Activities & Interests
-    # Subset of the 15 place tags: family_friendly, romantic, adventurous,
-    # budget_friendly, upscale, cultural, outdoor, nightlife, food_and_drink,
-    # shopping, wellness, historical, scenic, pet_friendly, quick_visit
-    preferred_tags:       list[str]
-    # 1–5 (1=stick to known, 5=always something new)
-    exploration_score:    int
-    # 1–5 (1=ignore reviews, 5=highly reviewed only)
-    popularity_weight:    int
+    # Section 3 — Activities & Interests
+    preferred_tags:       list[str]    # subset of the 15 place tags
+    exploration_score:    int          # 1–5 (1 = stick to known, 5 = always something new)
+    popularity_weight:    int          # 1–5 (1 = ignore reviews, 5 = highly reviewed only)
 
-    # Section 4 – Food & Dining
-    # "american" | "italian" | "east asian" | "southeast asian" | "mexican"
-    # | "indian" | "mediterranean" | "vegetarian" | "seafood"
-    cuisine_preferences:  list[str]
-    # "vegetarian" | "vegan" | "gluten_free" | "halal" | "kosher"
-    # | "nut_allergy" | "dairy_free"
-    dietary_restrictions: list[str]
+    # Section 4 — Food & Dining
+    cuisine_preferences:  list[str]    # see ALL_CUISINES in user_profiler.py
+    dietary_restrictions: list[str]    # see ALL_DIETARY in user_profiler.py
 
-    # Section 5 – Getting Around
-    # ["walk"] | ["bike"] | ["transit"] | ["drive"]
-    travel_mode:          list[str]
+    # Section 5 — Getting Around
+    travel_mode:          list[str]    # ["walk"] | ["bike"] | ["transit"] | ["drive"]
     max_travel_minutes:   str          # "< 10" | "10-20" | "20-40" | "> 40"
-    # "packed" (6/day) | "balanced" (4/day) | "relaxed" (2/day)
-    itinerary_pace:       str
+    itinerary_pace:       str          # "packed" (6/day) | "balanced" (4) | "relaxed" (2)
 
 
 class UserVisit(TypedDict, total=False):
-    """A single user–place interaction (from Google Maps history or in-app activity)."""
+    # a single user–place interaction from Google Maps history or in-app activity
     user_id:     str
     place_id:    str
     rating:      Optional[float]   # 1–5; None if not explicitly rated
-    visit_count: int                # number of times visited (≥ 1)
-    # Stage 1 tags of this place, used as CF signal
-    tags:        list[str]
+    visit_count: int                # ≥ 1
+    tags:        list[str]          # Stage 1 tags used as the CF signal
 
 
 # ---------------------------------------------------------------------------
 # Foursquare TIST 2015 loaders
 # Files: dataset_TIST2015_POIs.txt  (venue_id \t lat \t lon \t category \t country_code)
 #        dataset_TIST2015_Checkins.txt  (user_id \t venue_id \t utc_time \t tz_offset)
+# These files are large and gitignored — download from the Foursquare TIST 2015 dataset.
 # ---------------------------------------------------------------------------
 
-# Keyword → tags for Foursquare category names (e.g. "Italian Restaurant", "City Park")
+# maps Foursquare category keywords to our tag vocabulary
 _FS_CAT_TO_TAGS: dict[str, list[str]] = {
     # food & drink
     "restaurant":      ["food_and_drink"],
@@ -201,7 +183,7 @@ _FS_CAT_TO_TAGS: dict[str, list[str]] = {
     "steakhouse":      ["upscale", "food_and_drink"],
 }
 
-# categories to skip entirely — not travel destinations
+# categories to skip — not travel destinations, just utilities
 _FS_CAT_SKIP: set[str] = {
     "airport", "train station", "bus station", "subway", "transit",
     "college", "university", "school", "hospital", "clinic", "doctor",
@@ -213,7 +195,6 @@ _FS_CAT_SKIP: set[str] = {
 
 def _foursquare_cat_to_tags(category: str) -> list[str]:
     cat = category.strip().lower()
-    # skip non-destination venues
     if any(skip in cat for skip in _FS_CAT_SKIP):
         return []
     tags: set[str] = set()
@@ -224,18 +205,17 @@ def _foursquare_cat_to_tags(category: str) -> list[str]:
 
 
 def load_foursquare_pois(poi_path: str | Path) -> list[PlaceRecord]:
-    # TSV columns: venue_id  latitude  longitude  category  country_code  (no header)
+    # TSV: venue_id  latitude  longitude  category  country_code  (no header)
     df = pd.read_csv(
         poi_path, sep="\t", header=None,
-        names=["venue_id", "latitude", "longitude",
-               "category", "country_code"],
+        names=["venue_id", "latitude", "longitude", "category", "country_code"],
         dtype={"venue_id": str, "country_code": str},
     )
     logger.info("Read %d Foursquare venues from %s", len(df), poi_path)
 
     records: list[PlaceRecord] = []
     for _, row in df.iterrows():
-        cat = str(row.get("category") or "")
+        cat  = str(row.get("category") or "")
         tags = _foursquare_cat_to_tags(cat)
         if not tags:
             continue
@@ -265,6 +245,8 @@ def load_foursquare_checkins(
     min_checkins:  int = 5,
     max_users:     int | None = 50_000,
 ) -> list[UserVisit]:
+    # only load venues that made it through tag filtering so we don't carry
+    # utility places (banks, transit stops, etc.) into the CF matrix
     logger.info("Reading Foursquare check-ins from %s …", checkin_path)
     chunks = []
     for chunk in pd.read_csv(
@@ -280,17 +262,17 @@ def load_foursquare_checkins(
     df = pd.concat(chunks, ignore_index=True)
     logger.info("Loaded %d relevant check-ins", len(df))
 
-    counts = df["user_id"].value_counts()
+    # drop users who barely used Foursquare — their signal is too sparse to be useful
+    counts       = df["user_id"].value_counts()
     active_users = counts[counts >= min_checkins].index
-    df = df[df["user_id"].isin(active_users)]
+    df           = df[df["user_id"].isin(active_users)]
 
     if max_users is not None and len(active_users) > max_users:
         sampled = pd.Series(active_users).sample(max_users, random_state=42)
-        df = df[df["user_id"].isin(sampled)]
-        logger.info("Sampled %d / %d qualifying users",
-                    max_users, len(active_users))
+        df      = df[df["user_id"].isin(sampled)]
+        logger.info("Sampled %d / %d qualifying users", max_users, len(active_users))
 
-    # aggregate to one row per (user, venue)
+    # aggregate to one row per (user, venue) — visit_count captures repeat visits
     grouped = (
         df.groupby(["user_id", "venue_id"])
         .size()
@@ -299,7 +281,7 @@ def load_foursquare_checkins(
 
     visits: list[UserVisit] = []
     for _, row in grouped.iterrows():
-        vid = str(row["venue_id"])
+        vid  = str(row["venue_id"])
         tags = venue_tag_map.get(vid, [])
         if not tags:
             continue
@@ -318,7 +300,10 @@ def load_foursquare_checkins(
 
 
 # ---------------------------------------------------------------------------
-# Best-effort mapping from Lim POI theme strings to Stage 1 place tags
+# Lim Melbourne POI dataset (POI-Melb.csv / userVisits-Melb-allPOI.csv)
+# Used for CF pre-training alongside Foursquare data.
+# ---------------------------------------------------------------------------
+
 _LIM_THEME_TO_TAGS: dict[str, list[str]] = {
     "Museum":        ["cultural", "historical", "quick_visit"],
     "Sport":         ["outdoor", "adventurous"],
@@ -334,30 +319,21 @@ _LIM_THEME_TO_TAGS: dict[str, list[str]] = {
 
 
 def load_lim_poi(poi_path: str | Path) -> list[PlaceRecord]:
-    """Load Kwan Hui Lim Melbourne POI CSV into a PlaceRecord list.
-
-    Expected columns (subset): poiID, poiName, poiTheme, lat, lon.
-    Extra columns are silently ignored.
-    """
+    # flexible column detection so the loader works regardless of capitalisation/naming
     df = pd.read_csv(poi_path)
     df.columns = [c.strip() for c in df.columns]
     col = {c.lower(): c for c in df.columns}
 
-    id_col = col.get("poiid",    col.get(
-        "poi_id",   col.get("id",       None)))
-    name_col = col.get("poiname",  col.get(
-        "poi_name", col.get("name",     None)))
-    theme_col = col.get("poitheme", col.get(
-        "theme",    col.get("category", None)))
-    lat_col = col.get("lat",      col.get(
-        "latitude",                     None))
-    lon_col = col.get("lon",      col.get(
-        "long",     col.get("longitude", None)))
+    id_col    = col.get("poiid",    col.get("poi_id",   col.get("id",        None)))
+    name_col  = col.get("poiname",  col.get("poi_name", col.get("name",      None)))
+    theme_col = col.get("poitheme", col.get("theme",    col.get("category",  None)))
+    lat_col   = col.get("lat",      col.get("latitude",                      None))
+    lon_col   = col.get("lon",      col.get("long",     col.get("longitude", None)))
 
     records: list[PlaceRecord] = []
     for i, row in df.iterrows():
-        pid = str(row[id_col]) if id_col else str(i)
-        name = str(row[name_col]) if name_col else "Unknown"
+        pid   = str(row[id_col])   if id_col    else str(i)
+        name  = str(row[name_col]) if name_col  else "Unknown"
         theme = str(row[theme_col]).strip() if theme_col else ""
         try:
             lat = float(row[lat_col]) if lat_col else 0.0
@@ -381,21 +357,14 @@ def load_lim_poi(poi_path: str | Path) -> list[PlaceRecord]:
 
 
 def load_lim_visits(visits_path: str | Path, poi_records: list[PlaceRecord]) -> list[UserVisit]:
-    """Load Kwan Hui Lim user-visit CSV into a UserVisit list for CF pre-training.
-
-    Expected columns (subset): userID, poiID, visitCount (or similar).
-    Tags are attached from poi_records by matching place_id.
-    """
+    # attach tags from poi_records by matching place_id so the CF matrix has signal
     df = pd.read_csv(visits_path)
     df.columns = [c.strip() for c in df.columns]
     col = {c.lower(): c for c in df.columns}
 
-    user_col = col.get("userid",     col.get(
-        "user_id",    col.get("uid",   None)))
-    poi_col = col.get("poiid",      col.get(
-        "poi_id",     col.get("pid",   None)))
-    count_col = col.get("visitcount", col.get(
-        "visit_count", col.get("count", None)))
+    user_col  = col.get("userid",     col.get("user_id",     col.get("uid",   None)))
+    poi_col   = col.get("poiid",      col.get("poi_id",      col.get("pid",   None)))
+    count_col = col.get("visitcount", col.get("visit_count", col.get("count", None)))
 
     tag_map: dict[str, list[str]] = {
         p["place_id"]: (p.get("tags") or []) for p in poi_records
@@ -403,8 +372,8 @@ def load_lim_visits(visits_path: str | Path, poi_records: list[PlaceRecord]) -> 
 
     visits: list[UserVisit] = []
     for i, row in df.iterrows():
-        uid = str(row[user_col]) if user_col else str(i)
-        pid = f"lim_{row[poi_col]}" if poi_col else ""
+        uid   = str(row[user_col])  if user_col  else str(i)
+        pid   = f"lim_{row[poi_col]}" if poi_col else ""
         count = int(row[count_col]) if count_col else 1
 
         visits.append(UserVisit(
@@ -414,6 +383,5 @@ def load_lim_visits(visits_path: str | Path, poi_records: list[PlaceRecord]) -> 
             tags=tag_map.get(pid, []),
         ))
 
-    logger.info("Loaded %d LIM visit records from %s",
-                len(visits), visits_path)
+    logger.info("Loaded %d LIM visit records from %s", len(visits), visits_path)
     return visits
