@@ -1,5 +1,5 @@
 import { Routes, Route, Outlet } from 'react-router-dom'
-import './App.css'
+import './styles/index.css'
 import LandingPage from './pages/landing'
 import Navbar from './pages/navbar'
 import HomePage from './pages/home'

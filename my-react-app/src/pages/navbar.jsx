@@ -7,7 +7,7 @@ export default function Navbar() {
 
   return (
     <nav className="nav">
-      <span className="nav__logo">PlanIt</span>
+      <Link to="/" className="nav__logo">PlanIt</Link>
       <div className="nav__links">
         <Link to="/app/home" className={isActive('/app/home') ? 'active' : ''}>🏠 Home</Link>
         <Link to="/app/destination" className={isActive('/app/destination') ? 'active' : ''}>🔍 Discover</Link>

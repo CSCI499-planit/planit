@@ -1,0 +1,70 @@
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  animation: fadeUp 0.5s ease both;
+}
+
+.home__hero {
+  margin-bottom: 2rem;
+}
+
+.home__hero h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 0.25rem;
+}
+
+.home__hero p {
+  color: #666;
+  margin-bottom: 1.25rem;
+}
+
+.home__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.stats-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.stats-card {
+  flex: 1;
+  min-width: 100px;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-card__val {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111;
+}
+
+.stats-card__label {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  display: block;
+}
+
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 1rem;
+}
+
+.trip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}

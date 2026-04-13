@@ -1,0 +1,8 @@
+@import './globals.css';
+@import './variables.css';
+@import '../components/button.css';
+@import '../components/navbar.css';
+@import '../components/tripcard.css';
+@import '../components/landing.css';
+@import '../components/home.css';
+@import '../components/profile.css';

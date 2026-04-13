@@ -1,0 +1,144 @@
+.profile__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  background: var(--color-white);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.profile__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #d0e8ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.3rem;
+  color: #1a6fa8;
+  flex-shrink: 0;
+}
+
+.profile__info {
+  flex: 1;
+}
+
+.profile__info h2 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #111;
+}
+
+.profile__info p {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.profile__stats {
+  display: flex;
+  gap: var(--spacing-lg);
+}
+
+.profile__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.profile__stat span {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #111;
+}
+
+.profile__stat small {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.profile__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+}
+
+.profile__col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile__section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.profile__section-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111;
+}
+
+.profile__section-header span {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.past-trip {
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+}
+
+.past-trip__city {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #111;
+}
+
+.past-trip__dates {
+  display: block;
+  font-size: 0.75rem;
+  color: #666;
+  margin-top: 2px;
+}
+
+.upcoming-trip {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.upcoming-flag {
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.upcoming-trip strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #111;
+}
+
+.upcoming-trip p {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.profile__pref-hint {
+  font-size: 0.82rem;
+  color: #aaa;
+}
