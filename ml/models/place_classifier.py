@@ -4,8 +4,7 @@ import ast
 import logging
 import math
 import re
-from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
@@ -271,109 +270,3 @@ def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
     return labels
 
 
-def auto_label_places(places: list[PlaceRecord]) -> list[dict[str, Any]]:
-    # returns [{"place": PlaceRecord, "labels": {tag: 0|1}}]
-    return [{"place": p, "labels": rule_based_labels(p)} for p in places]
-
-
-# ---------------------------------------------------------------------------
-# Classifier — wraps a random forest for multi-label tag prediction
-# ---------------------------------------------------------------------------
-
-class PlaceTagClassifier:
-
-    def __init__(
-        self,
-        n_estimators: int = 200,
-        max_depth: int | None = None,
-        min_samples_leaf: int = 5,
-        random_state: int = 42,
-        class_weight: Literal["balanced", "balanced_subsample"] | None = "balanced_subsample",
-    ) -> None:
-        from sklearn.ensemble import RandomForestClassifier
-        from sklearn.multioutput import MultiOutputClassifier
-
-        base = RandomForestClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            min_samples_leaf=min_samples_leaf,
-            random_state=random_state,
-            class_weight=class_weight,
-            n_jobs=-1,
-        )
-        self.model      = MultiOutputClassifier(base)
-        self.extractor  = PlaceFeatureExtractor()
-        self._is_fitted = False
-
-    def train(self, places: list[PlaceRecord], label_dicts: list[dict[str, int]]) -> None:
-        if len(places) != len(label_dicts):
-            raise ValueError("places and label_dicts must have the same length")
-
-        X = self.extractor.extract_batch(places)
-        Y = np.array(
-            [[ld.get(tag, 0) for tag in PLACE_TAGS] for ld in label_dicts],
-            dtype=np.int8,
-        )
-        logger.info("Training on %d samples …", len(places))
-        self.model.fit(X, Y)
-        self._is_fitted = True
-
-    def train_from_auto_labels(self, places: list[PlaceRecord]) -> None:
-        # bootstrap training using rule-based labels before real labels are ready
-        labelled    = auto_label_places(places)
-        label_dicts = [r["labels"] for r in labelled]
-        self.train(places, label_dicts)
-
-    def predict(self, places: list[PlaceRecord]) -> list[list[str]]:
-        # returns a list of tag lists, one per place
-        self._check_fitted()
-        Y = self.model.predict(self.extractor.extract_batch(places))
-        return [
-            [PLACE_TAGS[j] for j in range(len(PLACE_TAGS)) if row[j] == 1]
-            for row in Y
-        ]
-
-    def predict_proba(self, places: list[PlaceRecord]) -> list[dict[str, float]]:
-        # per-tag confidence scores — useful for soft filtering or ranking
-        self._check_fitted()
-        proba_list = self.model.predict_proba(self.extractor.extract_batch(places))
-        return [
-            {tag: float(proba_list[j][i, 1]) for j, tag in enumerate(PLACE_TAGS)}
-            for i in range(len(places))
-        ]
-
-    def tag_places(self, places: list[PlaceRecord]) -> list[PlaceRecord]:
-        # main entry point — returns new dicts with "tags" filled in
-        tag_lists = self.predict(places)
-        return [{**p, "tags": tags} for p, tags in zip(places, tag_lists)]
-
-    def evaluate(self, places: list[PlaceRecord], label_dicts: list[dict[str, int]]) -> dict[str, Any]:
-        from sklearn.metrics import classification_report, hamming_loss
-        self._check_fitted()
-        X      = self.extractor.extract_batch(places)
-        Y_true = np.array([[ld.get(tag, 0) for tag in PLACE_TAGS] for ld in label_dicts], dtype=np.int8)
-        Y_pred = self.model.predict(X)
-        return {
-            "per_tag":      classification_report(Y_true, Y_pred, target_names=PLACE_TAGS, output_dict=True, zero_division=0),
-            "hamming_loss": hamming_loss(Y_true, Y_pred),
-        }
-
-    def save(self, path: str | Path) -> None:
-        import joblib
-        self._check_fitted()
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump({"model": self.model, "tags": PLACE_TAGS}, path)
-
-    @classmethod
-    def load(cls, path: str | Path) -> "PlaceTagClassifier":
-        import joblib
-        data           = joblib.load(path)
-        obj            = cls.__new__(cls)
-        obj.model      = data["model"]
-        obj.extractor  = PlaceFeatureExtractor()
-        obj._is_fitted = True
-        return obj
-
-    def _check_fitted(self) -> None:
-        if not self._is_fitted:
-            raise RuntimeError("PlaceTagClassifier is not fitted. Call train() first.")

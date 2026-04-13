@@ -73,6 +73,14 @@ class PlaceRecordSchema(BaseModel):
     # added by stage 3 — not present in input
     score: Optional[float] = None
 
+    # score breakdown — only present in /recommend and /itinerary responses
+    _cf_score:      Optional[float] = None
+    _tag_score:     Optional[float] = None
+    _pop_score:     Optional[float] = None
+    _cuisine_bonus: Optional[float] = None
+    _party_match:   Optional[float] = None
+    _fallback:      Optional[bool]  = None
+
 
 # --- Request/Response bodies ---
 

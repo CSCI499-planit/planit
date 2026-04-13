@@ -37,6 +37,9 @@ dev = [
     "seaborn",
 ]
 
+[tool.setuptools.packages.find]
+include = ["ml*", "server*"]
+
 [tool.pip]
 # run: pip install -e ".[dev]"  (dev)  or  pip install -e .  (prod)
 

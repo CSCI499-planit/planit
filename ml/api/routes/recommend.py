@@ -6,6 +6,22 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from ml.api.schemas import RecommendRequest, RecommendResponse, ItineraryRequest, ItineraryResponse
+from ml.utilities.geoapify import normalize_db_place
+
+
+def _normalize_places(places: list[dict]) -> list[dict]:
+    """
+    Normalizes place dicts coming from the API.
+    If a place came from Supabase (has 'lat'/'lon' instead of 'latitude'/'longitude'),
+    run it through normalize_db_place. Otherwise pass through unchanged.
+    """
+    out = []
+    for p in places:
+        if "lat" in p and "latitude" not in p:
+            out.append(normalize_db_place(p))
+        else:
+            out.append(p)
+    return out
 
 router = APIRouter()
 
@@ -16,7 +32,7 @@ def recommend(req: RecommendRequest, request: Request):
 
     # convert Pydantic models back to plain dicts so the pipeline TypedDicts accept them
     preference   = req.preference.model_dump()
-    places       = [p.model_dump() for p in req.places]
+    places       = _normalize_places([p.model_dump() for p in req.places])
     visits       = [v.model_dump() for v in req.visits] if req.visits else None
 
     # stage 1 — tag any places that don't already have tags
@@ -45,7 +61,7 @@ def itinerary(req: ItineraryRequest, request: Request):
     preference["trip_days"]  = req.trip_days
     preference["start_date"] = req.start_date
 
-    places = [p.model_dump() for p in req.places]
+    places = _normalize_places([p.model_dump() for p in req.places])
     visits = [v.model_dump() for v in req.visits] if req.visits else None
 
     tagged    = pipeline.run_stage1(places)
