@@ -349,43 +349,47 @@ def parse_google_saved_places(
 
 def parse_app_interactions(
     interactions: list[dict],
-    user_id:      str,
+    user_id:      str | None = None,
     place_tag_db: dict[str, list[str]] | None = None,
 ) -> list[UserVisit]:
     """
     Converts rows from the user_interactions table → UserVisit records for CF training.
 
     interactions: list of dicts from server/controllers/interactions.get_all_interactions()
+    user_id:      if None, processes all users (used for bulk training on startup)
     place_tag_db: optional {place_id: [tag, ...]} pulled from the places table
     """
     # import here to avoid circular dependency: server → ml → server
     from server.controllers.interactions import EVENT_RATINGS
 
     place_tag_db = place_tag_db or {}
-    aggregated: dict[str, dict] = {}
+    aggregated: dict[tuple[str, str], dict] = {}
 
     for row in interactions:
-        if row.get("user_id") != user_id:
+        row_user = row.get("user_id", "")
+        if user_id is not None and row_user != user_id:
             continue
         place_id   = row["place_id"]
         event_type = row.get("event_type", "view")
         rating     = EVENT_RATINGS.get(event_type, 2.5)
 
-        if place_id not in aggregated:
-            aggregated[place_id] = {
+        key = (row_user, place_id)
+        if key not in aggregated:
+            aggregated[key] = {
+                "user_id":     row_user,
                 "place_id":    place_id,
                 "tags":        place_tag_db.get(place_id, []),
                 "ratings":     [],
                 "visit_count": 0,
             }
-        aggregated[place_id]["ratings"].append(rating)
-        aggregated[place_id]["visit_count"] += 1
+        aggregated[key]["ratings"].append(rating)
+        aggregated[key]["visit_count"] += 1
 
     visits: list[UserVisit] = []
     for agg in aggregated.values():
         avg_rating = sum(agg["ratings"]) / len(agg["ratings"])
         visits.append(UserVisit(
-            user_id=user_id,
+            user_id=agg["user_id"],
             place_id=agg["place_id"],
             rating=round(avg_rating, 2),
             visit_count=agg["visit_count"],
@@ -393,8 +397,8 @@ def parse_app_interactions(
         ))
 
     logger.info(
-        "Parsed %d interactions → %d unique places for user %s",
-        len(interactions), len(visits), user_id,
+        "Parsed %d interactions → %d unique places (user_id=%s)",
+        len(interactions), len(visits), user_id or "all",
     )
     return visits
 

@@ -30,13 +30,29 @@ ML_HOST = os.getenv("ML_HOST", "0.0.0.0")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # load the pipeline once at startup — keeps the joblib model in memory
-    # instead of reloading it on every request
-    logger.info("Loading ML pipeline...")
-    app.state.pipeline = MLPipeline.load()
+    pipeline = MLPipeline()
+
+    try:
+        from supabase import create_client
+        sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+
+        prefs = sb.table("user_preference").select("*").execute().data or []
+        interactions = sb.table("user_interactions").select("*").execute().data or []
+
+        if prefs:
+            from ml.models.user_profiler import parse_app_interactions
+            visits = parse_app_interactions(interactions, user_id=None) if interactions else []
+            pipeline.train_stage2(visits=visits, preferences=prefs)
+            logger.info("Pipeline trained on %d preferences, %d interactions.", len(prefs), len(interactions))
+        else:
+            logger.warning("No preference data in Supabase — running in content-only mode.")
+
+    except Exception as e:
+        logger.warning("Startup training failed (%s) — pipeline will use cold-start mode.", e)
+
+    app.state.pipeline = pipeline
     logger.info("ML pipeline ready.")
     yield
-    # nothing to clean up, but this is where you'd flush caches etc.
 
 
 app = FastAPI(
