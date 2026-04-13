@@ -1,9 +1,16 @@
+# ML service
+fastapi
+uvicorn[standard]
+python-dotenv
 numpy
 pandas
-polars
 scikit-learn
+scipy
 joblib
 requests
-tensorflow
-tensorflow-recommenders
-ortools
+supabase
+
+# Main backend
+bcrypt
+postgrest
+pydantic
