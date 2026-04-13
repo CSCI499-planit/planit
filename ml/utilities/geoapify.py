@@ -92,6 +92,8 @@ def normalize_db_place(row: dict[str, Any]) -> PlaceRecord:
         "country":    row.get("country"),
         "postcode":   row.get("postcode"),
         "street":     row.get("street"),
+        "suburb":     row.get("suburb"),
+        "district":   row.get("district"),
         "categories": list(row.get("categories") or []),
         "hours":      row.get("hours"),
         "price_level":  None,

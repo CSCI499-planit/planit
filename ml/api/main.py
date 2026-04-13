@@ -106,7 +106,7 @@ async def lifespan(app: FastAPI):
             logger.warning("No preference data in Supabase — running in content-only mode.")
 
     except Exception as e:
-        logger.warning("Startup training failed (%s) — pipeline will use cold-start mode.", e)
+        logger.warning("Startup training failed (%s) — pipeline will use cold-start mode.", e, exc_info=True)
 
     app.state.pipeline = pipeline
     logger.info("ML pipeline ready.")

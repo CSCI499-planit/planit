@@ -319,8 +319,8 @@ class RouteOptimizer:
         # Time dimension — absolute minutes from midnight
         routing.AddDimension(
             transit_idx,
-            60,     # max waiting slack (1 hour)
-            1440,   # max time per vehicle (24 h ceiling)
+            60,          # max waiting slack (1 hour)
+            24 * 60,     # max time per vehicle (24 h ceiling)
             False,  # don't force start cumul to zero — we use absolute times
             "Time",
         )

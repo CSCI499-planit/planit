@@ -143,14 +143,6 @@ class HybridRecommender:
             "party_match":   party_match,
         }
 
-    def score_place(
-        self,
-        user_embedding: np.ndarray,
-        place: PlaceRecord,
-        preference: UserPreference,
-    ) -> float:
-        return self._score_place_with_breakdown(user_embedding, place, preference)["score"]
-
     def recommend(
         self,
         user_embedding: np.ndarray,

@@ -1,22 +1,21 @@
 # ML pipeline — single entry point the backend calls.
-# Stage 1: rule-based place tagging using OSM/Geoapify categories
+# Stage 1: rule-based place tagging using OSM/Geoapify categories  (active)
 # Stage 2: user embeddings via CF + content-based survey encoding  (active)
 # Stage 3: hybrid recommendation engine                             (active)
-# Stage 4: itinerary optimization — OR-Tools VRP                   (TODO)
+# Stage 4: itinerary optimization — OR-Tools VRPTW                 (active)
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
 from ml.data.preprocess import PlaceRecord, UserPreference, UserVisit
 from ml.models.place_classifier import rule_based_labels
 from ml.models.recommender import HybridRecommender
-from ml.models.user_profiler import UserProfiler, parse_google_takeout
+from ml.models.user_profiler import UserProfiler
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +29,6 @@ class PipelineConfig:
     # Stage 3
     rec_top_k:          int = 20
 
-    # Stage 4 (TODO)
-    travel_mode:        str = "drive"  # "drive" | "walk" | "transit" | "bike"
-
 
 class MLPipeline:
 
@@ -40,7 +36,6 @@ class MLPipeline:
         self.config        = config or PipelineConfig()
         self.user_profiler = UserProfiler(embedding_dim=self.config.user_embedding_dim)
         self._recommender  = HybridRecommender()
-        self._route_optimizer: Any = None  # stage 4 — not yet implemented
 
     # -------------------------------------------------------------------------
     # Stage 1: Place Tagging  (rule-based, stateless)
@@ -119,7 +114,9 @@ class MLPipeline:
     ) -> None:
         """Persist feature vectors for each recommendation — feeds future LTR training."""
         try:
-            from server.config.db import supabase
+            import os
+            from supabase import create_client
+            sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
             rows = []
             for position, place in enumerate(ranked):
                 rows.append({
@@ -135,13 +132,12 @@ class MLPipeline:
                     },
                     "final_score": place.get("score", 0.0),
                 })
-            supabase.table("recommendation_logs").insert(rows).execute()
+            sb.table("recommendation_logs").insert(rows).execute()
         except Exception as e:
-            # logging failure must never break recommendations
-            logger.warning("Failed to log recommendations: %s", e)
+            logger.warning("Failed to log recommendations: %s", e, exc_info=True)
 
     # -------------------------------------------------------------------------
-    # Stage 4: Route / Itinerary Optimization  (TODO)
+    # Stage 4: Route / Itinerary Optimization
     # -------------------------------------------------------------------------
 
     def run_stage4(
