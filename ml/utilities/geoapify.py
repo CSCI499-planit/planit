@@ -1,3 +1,7 @@
+# Parses raw Geoapify API responses into PlaceRecord dicts.
+# Everything gets normalised to the shared PlaceRecord schema before
+# entering the ML pipeline — this is the only place Geoapify JSON is touched.
+
 from __future__ import annotations
 
 import logging
@@ -8,9 +12,8 @@ from ml.data.preprocess import PlaceRecord
 logger = logging.getLogger(__name__)
 
 
-# Converts one Geoapify GeoJSON Feature into a PlaceRecord.
-# Returns None if the feature has no name or coordinates.
 def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
+    # returns None if the feature is missing a name or coordinates — skip those
     props = feature.get("properties", {})
     geom  = feature.get("geometry", {})
 
@@ -26,7 +29,7 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
 
     categories: list[str] = [c.lower() for c in (props.get("categories") or [])]
 
-    # pull any useful attributes from Geoapify sub-objects into the shared attributes dict
+    # pull useful sub-fields from Geoapify's nested objects into our flat attributes dict
     attrs: dict[str, Any] = {}
     if props.get("catering"):
         c = props["catering"]
@@ -61,15 +64,15 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
         "categories":    categories,
         "hours":         props.get("opening_hours"),
         "attributes":    attrs if attrs else None,
-        # Geoapify free tier doesn't return rating/price
+        # Geoapify free tier doesn't return rating or price data
         "price_level":   None,
         "rating":        None,
         "review_count":  None,
     }
 
 
-# Parses a full Geoapify FeatureCollection JSON response into a list of PlaceRecords.
 def parse_geoapify_response(response: dict[str, Any]) -> list[PlaceRecord]:
+    # converts a full FeatureCollection response into a list of PlaceRecords
     records: list[PlaceRecord] = []
     skipped = 0
     for feat in response.get("features", []):

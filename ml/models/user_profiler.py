@@ -1,6 +1,7 @@
 # Stage 2 — user preference profiling
-# Blends survey content-encoding with collaborative filtering (TruncatedSVD) into a 64-dim embedding.
-# CF weight ramps up as the user base grows; starts content-only to handle cold start.
+# Blends survey content-encoding with collaborative filtering (TruncatedSVD)
+# into a single 48-dim embedding per user.
+# CF weight ramps continuously from 0 → 0.8 as the user base grows to 250.
 
 from __future__ import annotations
 
@@ -22,8 +23,8 @@ from ml.models.place_classifier import PLACE_TAGS
 
 logger = logging.getLogger(__name__)
 
-# these must match the preference form exactly
-
+# these must match the preference form field values exactly — wrong values are
+# silently ignored during encoding, which is hard to debug
 ALL_TAGS: list[str] = PLACE_TAGS   # 15 place tags from Stage 1
 
 ALL_CUISINES: list[str] = [
@@ -42,9 +43,11 @@ ALL_PART_TYPES: list[str] = ["solo", "couple", "friends", "family", "mixed"]
 
 ALL_USE_CASES: list[str] = ["local", "daytrip", "travel", "mixed"]
 
-MIN_CF_USERS: int = 50  # below this threshold, stay content-based only
+# SVD is statistically unreliable below this user count — skip it and stay
+# content-only. CF weight ramps up continuously from zero above this threshold.
+MIN_SVD_USERS: int = 20
 
-# Content vector is 48 dims total (see _encode_preferences), padded to EMBEDDING_DIM
+# content vector layout: 15 + 9 + 4 + 5 + 4 + 7 + 4 scalars = 48 dims total
 _CONTENT_DIM: int = (
     len(ALL_TAGS)           # 15
     + len(ALL_CUISINES)     # 9
@@ -52,24 +55,28 @@ _CONTENT_DIM: int = (
     + len(ALL_PART_TYPES)   # 5
     + len(ALL_USE_CASES)    # 4
     + len(ALL_DIETARY)      # 7
-    + 4                     # scalar: budget tiers, exploration, popularity
+    + 4                     # scalars: budget tiers, exploration, popularity
 )  # = 48
 
-EMBEDDING_DIM: int = 64  # matches PipelineConfig.user_embedding_dim
+EMBEDDING_DIM: int = 48  # must equal _CONTENT_DIM — see assertion below
+assert _CONTENT_DIM == EMBEDDING_DIM, (
+    f"Content dim {_CONTENT_DIM} must equal EMBEDDING_DIM {EMBEDDING_DIM}. "
+    "Update both together or add a learned projection layer."
+)
 
-# Google Maps dwell time -> implicit rating mapping
-# Short stays are likely pass-bys; long stays signal real interest
+# maps Google Maps dwell time (minutes) to an implicit rating
+# short stays are likely pass-bys; long stays signal genuine interest
 _DURATION_RATING_BREAKPOINTS: list[tuple[int, float]] = [
     (5,  1.5),   # < 5 min  — probably just drove past
-    (15, 2.5),   # 5-15     — quick stop
-    (45, 3.5),   # 15-45    — normal visit
-    (90, 4.0),   # 45-90    — extended visit
+    (15, 2.5),   # 5–15     — quick stop
+    (45, 3.5),   # 15–45    — normal visit
+    (90, 4.0),   # 45–90    — extended visit
 ]
 _DURATION_MAX_RATING: float = 4.5  # 90+ min
 
 
 # ---------------------------------------------------------------------------
-# Itinerary pace helper  (Stage 4 reads this)
+# Stage 4 reads this to decide how many stops to plan per day
 # ---------------------------------------------------------------------------
 
 PACE_TO_MAX_PLACES: dict[str, int] = {
@@ -83,7 +90,9 @@ def pace_to_max_places(pace: str) -> int:
     return PACE_TO_MAX_PLACES.get(pace.lower(), 4)
 
 
+# ---------------------------------------------------------------------------
 # Google Takeout parsers
+# ---------------------------------------------------------------------------
 
 def parse_google_takeout(
     takeout_data:   dict[str, Any] | list[dict[str, Any]],
@@ -91,13 +100,11 @@ def parse_google_takeout(
     place_tag_db:   dict[str, list[str]],
     min_confidence: float = 50.0,
 ) -> list[UserVisit]:
-    """Parse Semantic Location History JSON into UserVisit records.
-    Accepts a single month dict or a list of months merged by the caller.
-    Dwell time is used as an implicit rating since there are no explicit ratings.
-    """
+    # accepts a single month dict or a list of months merged by the caller
+    # dwell time is used as an implicit rating since there are no explicit ratings
     months = [takeout_data] if isinstance(takeout_data, dict) else takeout_data
 
-    # Aggregate visits per place before building UserVisit records
+    # aggregate multiple visits to the same place before building UserVisit records
     aggregated: dict[str, dict[str, Any]] = {}
 
     for month in months:
@@ -114,7 +121,6 @@ def parse_google_takeout(
             if not place_id and not name:
                 continue
 
-            # use placeId as key when available, fall back to name
             key = place_id or name
 
             if key not in aggregated:
@@ -161,10 +167,11 @@ def _duration_to_implicit_rating(minutes: float) -> float:
     return _DURATION_MAX_RATING
 
 
+# ---------------------------------------------------------------------------
 # Google Maps Reviews / Saved Places parsers
+# ---------------------------------------------------------------------------
 
-# Keyword → tags inference for place names.
-# Used when we can't match a Google Maps place to our business database.
+# keyword → tags for place names when we can't match to our business database
 _NAME_KEYWORDS_TO_TAGS: dict[str, list[str]] = {
     # food & drink
     "restaurant":   ["food_and_drink"],
@@ -220,7 +227,7 @@ _NAME_KEYWORDS_TO_TAGS: dict[str, list[str]] = {
     "physical therapy": ["wellness"],
     "sports club":  ["wellness"],
     "climbing":     ["wellness", "adventurous", "outdoor"],
-    "movement":     ["wellness", "adventurous"],   # e.g. "Movement Gowanus"
+    "movement":     ["wellness", "adventurous"],
     # cultural
     "museum":       ["cultural", "historical"],
     "gallery":      ["cultural"],
@@ -237,7 +244,7 @@ _NAME_KEYWORDS_TO_TAGS: dict[str, list[str]] = {
 
 
 def _infer_tags_from_name(name: str) -> list[str]:
-    """Guess place tags from a place name using keyword matching."""
+    # best-effort tag inference from the place name when no category data is available
     name_lower = name.lower()
     tags: set[str] = set()
     for keyword, mapped in _NAME_KEYWORDS_TO_TAGS.items():
@@ -250,10 +257,8 @@ def parse_google_reviews(
     reviews_data: dict[str, Any],
     user_id:      str,
 ) -> list[UserVisit]:
-    """Parse Reviews.json from Google Takeout (Takeout/Maps/Reviews.json).
-    GeoJSON FeatureCollection — uses five_star_rating_published as rating.
-    Tags are inferred from place name since there's no category field.
-    """
+    # Reviews.json lives at Takeout/Maps/Reviews.json
+    # uses five_star_rating_published as the rating; tags inferred from place name
     visits: list[UserVisit] = []
     seen: set[str] = set()
 
@@ -261,7 +266,6 @@ def parse_google_reviews(
         props  = feature.get("properties", {})
         coords = feature.get("geometry", {}).get("coordinates", [0, 0])
 
-        # Skip entries with no location data
         if coords == [0, 0] or "location" not in props:
             continue
 
@@ -272,7 +276,7 @@ def parse_google_reviews(
         if not name or rating is None:
             continue
 
-        # Deduplicate by name (a user may have reviewed the same place twice)
+        # deduplicate — a user can review the same place more than once
         key = name.lower()
         if key in seen:
             continue
@@ -300,9 +304,8 @@ def parse_google_saved_places(
     saved_data: dict[str, Any],
     user_id:    str,
 ) -> list[UserVisit]:
-    """Parse Saved Places.json from Google Takeout (Takeout/Maps/Saved Places.json).
-    No explicit rating — saved places get an implicit score of 3.5.
-    """
+    # Saved Places.json lives at Takeout/Maps/Saved Places.json
+    # no explicit rating, so saved = implicit 3.5 (interested but unrated)
     visits: list[UserVisit] = []
     seen: set[str] = set()
 
@@ -328,7 +331,7 @@ def parse_google_saved_places(
         visits.append(UserVisit(
             user_id=user_id,
             place_id=place_id,
-            rating=3.5,   # implicit: saved = interested but not explicitly rated
+            rating=3.5,
             visit_count=1,
             tags=tags,
         ))
@@ -340,20 +343,78 @@ def parse_google_saved_places(
     return visits
 
 
+# ---------------------------------------------------------------------------
+# App interaction parser
+# ---------------------------------------------------------------------------
+
+def parse_app_interactions(
+    interactions: list[dict],
+    user_id:      str,
+    place_tag_db: dict[str, list[str]] | None = None,
+) -> list[UserVisit]:
+    """
+    Converts rows from the user_interactions table → UserVisit records for CF training.
+
+    interactions: list of dicts from server/controllers/interactions.get_all_interactions()
+    place_tag_db: optional {place_id: [tag, ...]} pulled from the places table
+    """
+    # import here to avoid circular dependency: server → ml → server
+    from server.controllers.interactions import EVENT_RATINGS
+
+    place_tag_db = place_tag_db or {}
+    aggregated: dict[str, dict] = {}
+
+    for row in interactions:
+        if row.get("user_id") != user_id:
+            continue
+        place_id   = row["place_id"]
+        event_type = row.get("event_type", "view")
+        rating     = EVENT_RATINGS.get(event_type, 2.5)
+
+        if place_id not in aggregated:
+            aggregated[place_id] = {
+                "place_id":    place_id,
+                "tags":        place_tag_db.get(place_id, []),
+                "ratings":     [],
+                "visit_count": 0,
+            }
+        aggregated[place_id]["ratings"].append(rating)
+        aggregated[place_id]["visit_count"] += 1
+
+    visits: list[UserVisit] = []
+    for agg in aggregated.values():
+        avg_rating = sum(agg["ratings"]) / len(agg["ratings"])
+        visits.append(UserVisit(
+            user_id=user_id,
+            place_id=agg["place_id"],
+            rating=round(avg_rating, 2),
+            visit_count=agg["visit_count"],
+            tags=agg["tags"],
+        ))
+
+    logger.info(
+        "Parsed %d interactions → %d unique places for user %s",
+        len(interactions), len(visits), user_id,
+    )
+    return visits
+
+
+# ---------------------------------------------------------------------------
+# UserProfiler
+# ---------------------------------------------------------------------------
 
 @dataclass
 class UserProfiler:
 
     embedding_dim: int = EMBEDDING_DIM
-    min_cf_users:  int = MIN_CF_USERS
 
-    _svd:             TruncatedSVD    | None = field(default=None,  repr=False, init=False)
-    _knn:             NearestNeighbors | None = field(default=None, repr=False, init=False)
-    _user_embeddings: np.ndarray      | None = field(default=None,  repr=False, init=False)
-    _user_ids:        list[str]              = field(default_factory=list, repr=False, init=False)
-    _tag_index:       dict[str, int]         = field(default_factory=dict, repr=False, init=False)
-    _n_trained_users: int                    = field(default=0,     repr=False, init=False)
-    _is_fitted:       bool                   = field(default=False, repr=False, init=False)
+    _svd:             TruncatedSVD     | None = field(default=None,  repr=False, init=False)
+    _knn:             NearestNeighbors | None = field(default=None,  repr=False, init=False)
+    _user_embeddings: np.ndarray       | None = field(default=None,  repr=False, init=False)
+    _user_ids:        list[str]               = field(default_factory=list, repr=False, init=False)
+    _tag_index:       dict[str, int]          = field(default_factory=dict, repr=False, init=False)
+    _n_trained_users: int                     = field(default=0,     repr=False, init=False)
+    _is_fitted:       bool                    = field(default=False, repr=False, init=False)
 
     # --- Training ---
 
@@ -376,15 +437,23 @@ class UserProfiler:
         cf_w = self._cf_weight(len(user_ids))
         logger.info("CF weight=%.2f  content weight=%.2f", cf_w, 1.0 - cf_w)
 
-        # Collaborative filtering — TruncatedSVD on user x tag matrix
-        svd_dim   = max(1, min(self.embedding_dim // 2, matrix.shape[1] - 1, len(user_ids) - 1))
-        self._svd = TruncatedSVD(n_components=svd_dim, random_state=42)
-        cf_emb    = normalize(_pad(self._svd.fit_transform(matrix), self.embedding_dim))
+        if len(user_ids) >= MIN_SVD_USERS:
+            svd_dim   = max(1, min(self.embedding_dim // 2, matrix.shape[1] - 1, len(user_ids) - 1))
+            self._svd = TruncatedSVD(n_components=svd_dim, random_state=42)
+            cf_emb    = normalize(_pad(self._svd.fit_transform(matrix), self.embedding_dim))
+        else:
+            logger.info(
+                "Only %d users — skipping SVD (need %d). Content-only mode.",
+                len(user_ids), MIN_SVD_USERS,
+            )
+            cf_w   = 0.0
+            cf_emb = np.zeros((len(user_ids), self.embedding_dim), dtype=np.float32)
 
-        # Content-based — encode each user's survey
+        # content component — encode each user's survey into a dense vector
         content_raw = np.array([self._encode_preferences(pref_map.get(uid)) for uid in user_ids])
         content_emb = normalize(_pad(content_raw, self.embedding_dim))
 
+        # blend the two and L2-normalise so cosine similarity works correctly
         self._user_embeddings = normalize(cf_w * cf_emb + (1.0 - cf_w) * content_emb)
 
         self._knn = NearestNeighbors(metric="cosine", algorithm="brute")
@@ -401,13 +470,19 @@ class UserProfiler:
         preference: UserPreference,
         visits:     list[UserVisit] | None = None,
     ) -> np.ndarray:
+        if not preference or not preference.get("user_id"):
+            logger.warning(
+                "embed_user called with no preference data — "
+                "returning zero vector. Popularity fallback will activate."
+            )
+
         content_raw = self._encode_preferences(preference)
         content_emb = _pad(content_raw[np.newaxis], self.embedding_dim)[0]
         content_norm = np.linalg.norm(content_emb)
         content_emb  = content_emb / (content_norm + 1e-9)
 
-        # No visit history or model not fitted — return content-only embedding
-        if not self._is_fitted or not visits:
+        # no visit history, model not trained, or SVD unavailable — content-only
+        if not self._is_fitted or not visits or self._svd is None:
             return content_emb
 
         tag_vec = self._visits_to_tag_vector(visits)
@@ -418,6 +493,7 @@ class UserProfiler:
             return content_emb
         cf_emb /= cf_norm
 
+        # frozen at last fit() — CF weight updates on retrain, not live
         cf_w     = self._cf_weight(self._n_trained_users)
         combined = cf_w * cf_emb + (1.0 - cf_w) * content_emb
         combined /= np.linalg.norm(combined) + 1e-9
@@ -455,17 +531,19 @@ class UserProfiler:
     # --- Internal helpers ---
 
     @staticmethod
-    def _cf_weight(n_users: int, min_users: int = MIN_CF_USERS) -> float:
-        # Ramp from 0 to 0.8 as user count grows from MIN_CF_USERS to 5x that
-        if n_users < min_users:
-            return 0.0
-        return 0.8 * min((n_users - min_users) / (4 * min_users), 1.0)
+    def _cf_weight(n_users: int, target_users: int = 250) -> float:
+        # ramps CF contribution 0 → 0.8 as user count grows 0 → 250
+        # at  6 users: ~0.019  (near-zero, content dominates)
+        # at 50 users:  0.16
+        # at 250 users: 0.80   (max CF contribution)
+        return 0.8 * min(n_users / target_users, 1.0)
 
     def _build_interaction_matrix(
         self,
         visits: list[UserVisit],
     ) -> tuple[csr_matrix, list[str], dict[str, int]]:
-        # sparse user x tag matrix; cell value = rating * visit_count (unrated defaults to 3.0)
+        # sparse user × tag matrix; cell value = rating × visit_count
+        # unrated visits default to 3.0 (neutral)
         all_tags_seen: set[str] = set(ALL_TAGS)
         for v in visits:
             all_tags_seen.update(v.get("tags") or [])
@@ -489,6 +567,7 @@ class UserProfiler:
         )
 
     def _visits_to_tag_vector(self, visits: list[UserVisit]) -> np.ndarray:
+        # same rating × visit_count weighting as the training matrix
         vec = np.zeros(len(self._tag_index))
         for v in visits:
             score = float(v.get("rating") or 3.0) * max(int(v.get("visit_count") or 1), 1)
@@ -499,15 +578,15 @@ class UserProfiler:
 
     @staticmethod
     def _encode_preferences(pref: UserPreference | None) -> np.ndarray:
-        # Encodes the preference survey into a 48-dim vector
-        # Layout:
+        # encodes a user's survey into a 48-dim vector
+        # layout:
         #   [0 :15]  preferred_tags one-hot
         #   [15:24]  cuisine_preferences one-hot
         #   [24:28]  travel_mode one-hot
-        #   [28:33]  part_type one-hot
+        #   [28:33]  party_type one-hot
         #   [33:37]  use_case one-hot
         #   [37:44]  dietary_restrictions one-hot
-        #   [44:48]  scalar features (budget tiers, exploration, popularity)
+        #   [44:48]  scalars (budget tiers, exploration, popularity) normalised to [0,1]
         vec = np.zeros(_CONTENT_DIM, dtype=np.float32)
         if pref is None:
             return vec
@@ -529,7 +608,7 @@ class UserProfiler:
                 vec[offset + ALL_TRAVEL_MODES.index(m)] = 1.0
         offset += len(ALL_TRAVEL_MODES)
 
-        pt = pref.get("part_type", "")
+        pt = pref.get("party_type", "")
         if pt in ALL_PART_TYPES:
             vec[offset + ALL_PART_TYPES.index(pt)] = 1.0
         offset += len(ALL_PART_TYPES)
@@ -544,7 +623,7 @@ class UserProfiler:
                 vec[offset + ALL_DIETARY.index(d)] = 1.0
         offset += len(ALL_DIETARY)
 
-        # Normalise scalars to [0, 1]
+        # normalise scalars to [0, 1] so they're on the same scale as the one-hots
         vec[offset]     = (float(pref.get("daily_budget_tier") or 2) - 1.0) / 3.0
         trip_tier       = pref.get("trip_budget_tier")
         vec[offset + 1] = (float(trip_tier) - 1.0) / 3.0 if trip_tier is not None else 0.0
@@ -554,8 +633,8 @@ class UserProfiler:
         return vec
 
 
-
 def _pad(arr: np.ndarray, dim: int) -> np.ndarray:
+    # pads or truncates the last dimension to match the target embedding size
     current = arr.shape[-1]
     if current == dim:
         return arr
