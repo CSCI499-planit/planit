@@ -5,7 +5,7 @@
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ml.api.schemas import RecommendRequest, RecommendResponse
+from ml.api.schemas import RecommendRequest, RecommendResponse, ItineraryRequest, ItineraryResponse
 
 router = APIRouter()
 
@@ -36,3 +36,27 @@ def recommend(req: RecommendRequest, request: Request):
         raise HTTPException(status_code=404, detail="No places passed the filters for this preference.")
 
     return RecommendResponse(places=ranked)
+
+
+@router.post("/itinerary", response_model=ItineraryResponse)
+def itinerary(req: ItineraryRequest, request: Request):
+    pipeline   = request.app.state.pipeline
+    preference = req.preference.model_dump()
+    preference["trip_days"]  = req.trip_days
+    preference["start_date"] = req.start_date
+
+    places = [p.model_dump() for p in req.places]
+    visits = [v.model_dump() for v in req.visits] if req.visits else None
+
+    tagged    = pipeline.run_stage1(places)
+    embedding = pipeline.run_stage2(preference, visits)
+    ranked    = pipeline.run_stage3(
+        user_embedding=embedding,
+        tagged_places=tagged,
+        trip_context=preference,
+    )
+
+    if not ranked:
+        raise HTTPException(status_code=404, detail="No places passed the filters for this preference.")
+
+    return ItineraryResponse(itinerary=pipeline.run_stage4(ranked, preference))

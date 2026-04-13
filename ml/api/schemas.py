@@ -87,6 +87,38 @@ class RecommendResponse(BaseModel):
     places: list[PlaceRecordSchema]   # ranked, each has a "score" field
 
 
+class ItineraryRequest(BaseModel):
+    preference: UserPreferenceSchema
+    places: list[PlaceRecordSchema]
+    visits: Optional[list[UserVisitSchema]] = None
+    top_k: int = 20
+    trip_days: int = 1
+    start_date: Optional[str] = None   # "YYYY-MM-DD"
+
+
+class TravelLegSchema(BaseModel):
+    mode: str
+    minutes: int
+    distance_m: int
+
+
+class StopSchema(BaseModel):
+    place: PlaceRecordSchema
+    arrival_time: str
+    departure_time: str
+    travel_to_next: Optional[TravelLegSchema] = None
+
+
+class DaySchema(BaseModel):
+    day: int
+    date: Optional[str] = None
+    stops: list[StopSchema]
+
+
+class ItineraryResponse(BaseModel):
+    itinerary: list[DaySchema]
+
+
 class EmbedRequest(BaseModel):
     preference: UserPreferenceSchema
     visits: Optional[list[UserVisitSchema]] = None

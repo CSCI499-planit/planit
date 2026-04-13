@@ -149,7 +149,9 @@ class MLPipeline:
         ranked_places: list[PlaceRecord],
         trip_context:  dict,
     ) -> list[dict]:
-        raise NotImplementedError("Stage 4 not yet implemented.")
+        from ml.models.route_optimizer import RouteOptimizer
+        logger.info("Stage 4: building itinerary for %d places", len(ranked_places))
+        return RouteOptimizer().optimize(ranked_places, trip_context)
 
     # -------------------------------------------------------------------------
     # Persistence
