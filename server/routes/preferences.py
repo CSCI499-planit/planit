@@ -8,7 +8,7 @@ from uuid import uuid4
 from server.config.db import get_db_client, get_current_user
 from server.models.preferences import preferenceInput
 
-PREFERENCE_TABLE = 'user_preference'
+PREFERENCE_TABLE = 'preference'
 router = APIRouter(prefix="/preference",tags=["preference"])
 
 @router.post("/")
