@@ -71,6 +71,39 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
     }
 
 
+def normalize_db_place(row: dict[str, Any]) -> PlaceRecord:
+    """
+    Maps a Supabase 'place' table row → PlaceRecord.
+
+    DB column  ML field
+    ────────── → ──────────
+    id (UUID)  → place_id (str)
+    lat        → latitude
+    lon        → longitude
+    """
+    return {
+        "place_id":   str(row.get("id", "")),
+        "name":       row.get("name", ""),
+        "source":     "supabase",
+        "latitude":   float(row.get("lat") or 0.0),
+        "longitude":  float(row.get("lon") or 0.0),
+        "city":       row.get("city"),
+        "state":      row.get("state"),
+        "country":    row.get("country"),
+        "postcode":   row.get("postcode"),
+        "street":     row.get("street"),
+        "suburb":     row.get("suburb"),
+        "district":   row.get("district"),
+        "categories": list(row.get("categories") or []),
+        "hours":      row.get("hours"),
+        "price_level":  None,
+        "rating":       None,
+        "review_count": None,
+        "attributes":   None,
+        "tags":         None,
+    }
+
+
 def parse_geoapify_response(response: dict[str, Any]) -> list[PlaceRecord]:
     # converts a full FeatureCollection response into a list of PlaceRecords
     records: list[PlaceRecord] = []

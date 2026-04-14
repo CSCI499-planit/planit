@@ -12,11 +12,10 @@ INTERACTIONS_TABLE = 'user_interactions'
 
 # maps each event type to an implicit rating (1–5 scale)
 EVENT_RATINGS: dict[str, float] = {
-    "itinerary_add": 4.5,
-    "save":          4.0,
-    "view":          2.5,
-    "unsave":        1.5,
-    "swipe_pass":    1.0,
+    "like":              4.5,
+    "unlike":            1.0,
+    "itinerary_like":    5.0,
+    "itinerary_dislike": 1.0,
 }
 
 

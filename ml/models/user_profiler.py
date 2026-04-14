@@ -349,43 +349,47 @@ def parse_google_saved_places(
 
 def parse_app_interactions(
     interactions: list[dict],
-    user_id:      str,
+    user_id:      str | None = None,
     place_tag_db: dict[str, list[str]] | None = None,
 ) -> list[UserVisit]:
     """
     Converts rows from the user_interactions table → UserVisit records for CF training.
 
     interactions: list of dicts from server/controllers/interactions.get_all_interactions()
+    user_id:      if None, processes all users (used for bulk training on startup)
     place_tag_db: optional {place_id: [tag, ...]} pulled from the places table
     """
     # import here to avoid circular dependency: server → ml → server
     from server.controllers.interactions import EVENT_RATINGS
 
     place_tag_db = place_tag_db or {}
-    aggregated: dict[str, dict] = {}
+    aggregated: dict[tuple[str, str], dict] = {}
 
     for row in interactions:
-        if row.get("user_id") != user_id:
+        row_user = row.get("user_id", "")
+        if user_id is not None and row_user != user_id:
             continue
         place_id   = row["place_id"]
         event_type = row.get("event_type", "view")
         rating     = EVENT_RATINGS.get(event_type, 2.5)
 
-        if place_id not in aggregated:
-            aggregated[place_id] = {
+        key = (row_user, place_id)
+        if key not in aggregated:
+            aggregated[key] = {
+                "user_id":     row_user,
                 "place_id":    place_id,
                 "tags":        place_tag_db.get(place_id, []),
                 "ratings":     [],
                 "visit_count": 0,
             }
-        aggregated[place_id]["ratings"].append(rating)
-        aggregated[place_id]["visit_count"] += 1
+        aggregated[key]["ratings"].append(rating)
+        aggregated[key]["visit_count"] += 1
 
     visits: list[UserVisit] = []
     for agg in aggregated.values():
         avg_rating = sum(agg["ratings"]) / len(agg["ratings"])
         visits.append(UserVisit(
-            user_id=user_id,
+            user_id=agg["user_id"],
             place_id=agg["place_id"],
             rating=round(avg_rating, 2),
             visit_count=agg["visit_count"],
@@ -393,8 +397,8 @@ def parse_app_interactions(
         ))
 
     logger.info(
-        "Parsed %d interactions → %d unique places for user %s",
-        len(interactions), len(visits), user_id,
+        "Parsed %d interactions → %d unique places (user_id=%s)",
+        len(interactions), len(visits), user_id or "all",
     )
     return visits
 
@@ -429,29 +433,50 @@ class UserProfiler:
         )
 
         pref_map = {p["user_id"]: p for p in preferences}
-        matrix, user_ids, tag_index = self._build_interaction_matrix(visits)
-        self._user_ids        = user_ids
-        self._tag_index       = tag_index
-        self._n_trained_users = len(user_ids)
+        matrix, interaction_user_ids, tag_index = self._build_interaction_matrix(visits)
 
-        cf_w = self._cf_weight(len(user_ids))
+        # CF component — only when we have enough interaction data
+        n_interaction_users = len(interaction_user_ids)
+        cf_w = self._cf_weight(n_interaction_users)
         logger.info("CF weight=%.2f  content weight=%.2f", cf_w, 1.0 - cf_w)
 
-        if len(user_ids) >= MIN_SVD_USERS:
-            svd_dim   = max(1, min(self.embedding_dim // 2, matrix.shape[1] - 1, len(user_ids) - 1))
+        if n_interaction_users >= MIN_SVD_USERS:
+            svd_dim   = max(1, min(self.embedding_dim // 2, matrix.shape[1] - 1, n_interaction_users - 1))
             self._svd = TruncatedSVD(n_components=svd_dim, random_state=42)
-            cf_emb    = normalize(_pad(self._svd.fit_transform(matrix), self.embedding_dim))
+            cf_raw    = normalize(_pad(self._svd.fit_transform(matrix), self.embedding_dim))
+            # cf embeddings keyed by user_id for later blending
+            cf_lookup = {uid: cf_raw[i] for i, uid in enumerate(interaction_user_ids)}
         else:
             logger.info(
-                "Only %d users — skipping SVD (need %d). Content-only mode.",
-                len(user_ids), MIN_SVD_USERS,
+                "Only %d interaction users — skipping SVD (need %d). Content-only mode.",
+                n_interaction_users, MIN_SVD_USERS,
             )
-            cf_w   = 0.0
-            cf_emb = np.zeros((len(user_ids), self.embedding_dim), dtype=np.float32)
+            cf_w      = 0.0
+            cf_lookup = {}
 
-        # content component — encode each user's survey into a dense vector
-        content_raw = np.array([self._encode_preferences(pref_map.get(uid)) for uid in user_ids])
+        # user_ids = union of interaction users + preference-only users
+        all_user_ids = list(dict.fromkeys(interaction_user_ids + [
+            uid for uid in pref_map if uid not in set(interaction_user_ids)
+        ]))
+
+        if not all_user_ids:
+            self._is_fitted = False
+            logger.warning("No users to fit — pipeline remains in cold-start mode.")
+            return self
+
+        self._user_ids        = all_user_ids
+        self._tag_index       = tag_index
+        self._n_trained_users = n_interaction_users  # CF count, not total
+
+        # content component — encode each user's survey
+        content_raw = np.vstack([self._encode_preferences(pref_map.get(uid)) for uid in all_user_ids])
         content_emb = normalize(_pad(content_raw, self.embedding_dim))
+
+        # CF component aligned to all_user_ids (zeros for preference-only users)
+        cf_emb = np.vstack([
+            cf_lookup.get(uid, np.zeros(self.embedding_dim, dtype=np.float32))
+            for uid in all_user_ids
+        ])
 
         # blend the two and L2-normalise so cosine similarity works correctly
         self._user_embeddings = normalize(cf_w * cf_emb + (1.0 - cf_w) * content_emb)

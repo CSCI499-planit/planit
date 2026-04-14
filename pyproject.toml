@@ -4,40 +4,44 @@ version = "0.1.0"
 requires-python = ">=3.11"
 
 dependencies = [
+    # API
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+    "python-dotenv>=1.0",
+    "pydantic>=2.0",
+
     # data
     "numpy>=1.26,<3.0",
     "pandas>=2.2,<3.0",
-    "polars>=0.20,<2.0",
+    "scipy>=1.12",
 
-    # ML - Stage 1
+    # ML
     "scikit-learn>=1.4,<2.0",
     "joblib>=1.3",
-
-    # ML - Stages 2-4 (TF-based recommender + OR-Tools optimizer)
-    "tensorflow>=2.16,<3.0",
-    "tensorflow-recommenders>=0.7",
     "ortools>=9.9",
 
-    # HTTP (backend uses this; ML parser doesn't call HTTP directly)
+    # HTTP
     "requests>=2.31",
 
-    # dataset download from Google Drive
-    "gdown>=5.1",
-
-    # sparse matrices used by Stage 2 (also a scikit-learn dep, but explicit is safer)
-    "scipy>=1.12",
+    # database
+    "supabase>=2.0",
+    "postgrest>=0.16",
+    "bcrypt>=4.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ipykernel",        # notebook support
+    "ipykernel",
     "jupyterlab",
     "matplotlib",
     "seaborn",
 ]
 
+[tool.setuptools.packages.find]
+include = ["ml*", "server*"]
+
 [tool.pip]
-# teammates run: pip install -e ".[dev]"  (dev)  or  pip install -e .  (prod)
+# run: pip install -e ".[dev]"  (dev)  or  pip install -e .  (prod)
 
 [tool.pyright]
 pythonVersion = "3.11"

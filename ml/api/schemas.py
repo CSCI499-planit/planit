@@ -73,6 +73,14 @@ class PlaceRecordSchema(BaseModel):
     # added by stage 3 — not present in input
     score: Optional[float] = None
 
+    # score breakdown — only present in /recommend and /itinerary responses
+    _cf_score:      Optional[float] = None
+    _tag_score:     Optional[float] = None
+    _pop_score:     Optional[float] = None
+    _cuisine_bonus: Optional[float] = None
+    _party_match:   Optional[float] = None
+    _fallback:      Optional[bool]  = None
+
 
 # --- Request/Response bodies ---
 
@@ -85,6 +93,38 @@ class RecommendRequest(BaseModel):
 
 class RecommendResponse(BaseModel):
     places: list[PlaceRecordSchema]   # ranked, each has a "score" field
+
+
+class ItineraryRequest(BaseModel):
+    preference: UserPreferenceSchema
+    places: list[PlaceRecordSchema]
+    visits: Optional[list[UserVisitSchema]] = None
+    top_k: int = 20
+    trip_days: int = 1
+    start_date: Optional[str] = None   # "YYYY-MM-DD"
+
+
+class TravelLegSchema(BaseModel):
+    mode: str
+    minutes: int
+    distance_m: int
+
+
+class StopSchema(BaseModel):
+    place: PlaceRecordSchema
+    arrival_time: str
+    departure_time: str
+    travel_to_next: Optional[TravelLegSchema] = None
+
+
+class DaySchema(BaseModel):
+    day: int
+    date: Optional[str] = None
+    stops: list[StopSchema]
+
+
+class ItineraryResponse(BaseModel):
+    itinerary: list[DaySchema]
 
 
 class EmbedRequest(BaseModel):

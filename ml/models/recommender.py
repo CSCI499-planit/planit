@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ml.models.place_classifier import PLACE_TAGS
-from ml.models.user_profiler import EMBEDDING_DIM as _PROFILER_EMBEDDING_DIM
+from ml.models.user_profiler import EMBEDDING_DIM
 from ml.utilities.embeddings import cosine_similarity
 
 if TYPE_CHECKING:
@@ -21,15 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# must match EMBEDDING_DIM in user_profiler.py so we're comparing in the same space
-_EMBEDDING_DIM = 48
 _N_TAGS = len(PLACE_TAGS)  # 15
-
-assert _EMBEDDING_DIM == _PROFILER_EMBEDDING_DIM, (
-    f"recommender._EMBEDDING_DIM ({_EMBEDDING_DIM}) must match "
-    f"user_profiler.EMBEDDING_DIM ({_PROFILER_EMBEDDING_DIM}). "
-    "Update both together."
-)
 
 # Approximate max — needs tuning against real data.
 # A 5-star place with ~54k reviews gives 5 × ln(54001) ≈ 54, but using 25.0
@@ -55,7 +47,7 @@ _DIETARY_TAG_FILTER: dict[str, str] = {
 def _place_embedding(place: PlaceRecord) -> np.ndarray:
     # binary tag vector, zero-padded to the full embedding dim so cosine sim works
     place_tags = set(place.get("tags") or [])
-    vec = np.zeros(_EMBEDDING_DIM, dtype=np.float32)
+    vec = np.zeros(EMBEDDING_DIM, dtype=np.float32)
     for i, tag in enumerate(PLACE_TAGS):
         if tag in place_tags:
             vec[i] = 1.0
@@ -150,14 +142,6 @@ class HybridRecommender:
             "cuisine_bonus": cuisine_bonus,
             "party_match":   party_match,
         }
-
-    def score_place(
-        self,
-        user_embedding: np.ndarray,
-        place: PlaceRecord,
-        preference: UserPreference,
-    ) -> float:
-        return self._score_place_with_breakdown(user_embedding, place, preference)["score"]
 
     def recommend(
         self,
