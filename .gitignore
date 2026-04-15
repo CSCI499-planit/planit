@@ -13,8 +13,5 @@ dist/
 build/
 data/review*
 
-# large model artifacts
-artifacts/*.joblib
-
 # personal takeout data
 data/AhmedTakeout/

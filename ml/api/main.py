@@ -92,7 +92,6 @@ async def lifespan(app: FastAPI):
         real_interaction_users = len({v["user_id"] for v in real_visits})
 
         if real_interaction_users >= MIN_SVD_USERS:
-            # enough real users to replace the Foursquare pre-training
             logger.info("%d real interaction users — retraining CF on live data.", real_interaction_users)
             pipeline.train_stage2(visits=real_visits, preferences=prefs)
         elif prefs:
@@ -100,6 +99,9 @@ async def lifespan(app: FastAPI):
             logger.info("Pipeline updated: %d preferences, %d real interactions.", len(prefs), len(real_visits))
         else:
             logger.warning("No preference data in Supabase — running in content-only mode.")
+
+        pipeline.save()
+        logger.info("Profiler saved to %s", artifact_path)
 
     except Exception as e:
         logger.warning("Startup training failed (%s) — pipeline will use cold-start mode.", e, exc_info=True)
