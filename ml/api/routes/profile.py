@@ -1,9 +1,3 @@
-"""
-    /profile endpoints — embed a user or find similar users in the trained model.
-    Useful for the frontend to show "users like you also liked..." or to debug
-    whether a user's profile is being encoded correctly.
-"""
-
 from fastapi import APIRouter, Request
 
 from ml.api.schemas import (

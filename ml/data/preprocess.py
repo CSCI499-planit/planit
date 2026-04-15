@@ -9,16 +9,10 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Stage 1 schema — every data source gets normalised to this before the ML
-# pipeline touches it. adding a source field so we can trace where a place
-# came from if something looks off in the recommendations.
-# ---------------------------------------------------------------------------
-
 class PlaceRecord(TypedDict, total=False):
     place_id:      str
     name:          str
-    source:        str            # "geoapify" | "foursquare" | "google" | "lim_poi"
+    source:        str            # "geoapify" | "foursquare" | "google"
     latitude:      float
     longitude:     float
     city:          Optional[str]
@@ -36,10 +30,6 @@ class PlaceRecord(TypedDict, total=False):
     attributes:    Optional[dict[str, Any]]   # GoodForKids, DogsAllowed, etc.
     tags:          Optional[list[str]]        # filled in by Stage 1
 
-
-# ---------------------------------------------------------------------------
-# Stage 2 schemas — user preferences (from the survey) and visit history
-# ---------------------------------------------------------------------------
 
 class UserPreference(TypedDict, total=False):
     # direct mapping of the onboarding survey — backend stores verbatim and
@@ -70,7 +60,6 @@ class UserPreference(TypedDict, total=False):
 
 
 class UserVisit(TypedDict, total=False):
-    # a single user–place interaction from Google Maps history or in-app activity
     user_id:     str
     place_id:    str
     rating:      Optional[float]   # 1–5; None if not explicitly rated
@@ -78,12 +67,9 @@ class UserVisit(TypedDict, total=False):
     tags:        list[str]          # Stage 1 tags used as the CF signal
 
 
-# ---------------------------------------------------------------------------
 # Foursquare TIST 2015 loaders
 # Files: dataset_TIST2015_POIs.txt  (venue_id \t lat \t lon \t category \t country_code)
 #        dataset_TIST2015_Checkins.txt  (user_id \t venue_id \t utc_time \t tz_offset)
-# These files are large and gitignored — download from the Foursquare TIST 2015 dataset.
-# ---------------------------------------------------------------------------
 
 # maps Foursquare category keywords to our tag vocabulary
 _FS_CAT_TO_TAGS: dict[str, list[str]] = {
@@ -296,92 +282,4 @@ def load_foursquare_checkins(
         "Built %d user-venue visit pairs (%d unique users)",
         len(visits), grouped["user_id"].nunique(),
     )
-    return visits
-
-
-# ---------------------------------------------------------------------------
-# Lim Melbourne POI dataset (POI-Melb.csv / userVisits-Melb-allPOI.csv)
-# Used for CF pre-training alongside Foursquare data.
-# ---------------------------------------------------------------------------
-
-_LIM_THEME_TO_TAGS: dict[str, list[str]] = {
-    "Museum":        ["cultural", "historical", "quick_visit"],
-    "Sport":         ["outdoor", "adventurous"],
-    "Structure":     ["historical", "scenic"],
-    "Park":          ["outdoor", "scenic", "pet_friendly"],
-    "Entertainment": ["family_friendly", "quick_visit"],
-    "Shopping":      ["shopping", "quick_visit"],
-    "Nightlife":     ["nightlife", "food_and_drink"],
-    "Food":          ["food_and_drink"],
-    "Beach":         ["outdoor", "scenic", "adventurous"],
-    "Garden":        ["outdoor", "scenic", "romantic"],
-}
-
-
-def load_lim_poi(poi_path: str | Path) -> list[PlaceRecord]:
-    # flexible column detection so the loader works regardless of capitalisation/naming
-    df = pd.read_csv(poi_path)
-    df.columns = [c.strip() for c in df.columns]
-    col = {c.lower(): c for c in df.columns}
-
-    id_col    = col.get("poiid",    col.get("poi_id",   col.get("id",        None)))
-    name_col  = col.get("poiname",  col.get("poi_name", col.get("name",      None)))
-    theme_col = col.get("poitheme", col.get("theme",    col.get("category",  None)))
-    lat_col   = col.get("lat",      col.get("latitude",                      None))
-    lon_col   = col.get("lon",      col.get("long",     col.get("longitude", None)))
-
-    records: list[PlaceRecord] = []
-    for i, row in df.iterrows():
-        pid   = str(row[id_col])   if id_col    else str(i)
-        name  = str(row[name_col]) if name_col  else "Unknown"
-        theme = str(row[theme_col]).strip() if theme_col else ""
-        try:
-            lat = float(row[lat_col]) if lat_col else 0.0
-            lon = float(row[lon_col]) if lon_col else 0.0
-        except (ValueError, TypeError):
-            lat, lon = 0.0, 0.0
-
-        tags = _LIM_THEME_TO_TAGS.get(theme) or []
-        records.append(PlaceRecord(
-            place_id=f"lim_{pid}",
-            name=name,
-            source="lim_poi",
-            latitude=lat,
-            longitude=lon,
-            categories=[theme.lower()] if theme else [],
-            tags=tags or None,
-        ))
-
-    logger.info("Loaded %d LIM POI records from %s", len(records), poi_path)
-    return records
-
-
-def load_lim_visits(visits_path: str | Path, poi_records: list[PlaceRecord]) -> list[UserVisit]:
-    # attach tags from poi_records by matching place_id so the CF matrix has signal
-    df = pd.read_csv(visits_path)
-    df.columns = [c.strip() for c in df.columns]
-    col = {c.lower(): c for c in df.columns}
-
-    user_col  = col.get("userid",     col.get("user_id",     col.get("uid",   None)))
-    poi_col   = col.get("poiid",      col.get("poi_id",      col.get("pid",   None)))
-    count_col = col.get("visitcount", col.get("visit_count", col.get("count", None)))
-
-    tag_map: dict[str, list[str]] = {
-        p["place_id"]: (p.get("tags") or []) for p in poi_records
-    }
-
-    visits: list[UserVisit] = []
-    for i, row in df.iterrows():
-        uid   = str(row[user_col])  if user_col  else str(i)
-        pid   = f"lim_{row[poi_col]}" if poi_col else ""
-        count = int(row[count_col]) if count_col else 1
-
-        visits.append(UserVisit(
-            user_id=uid,
-            place_id=pid,
-            visit_count=max(count, 1),
-            tags=tag_map.get(pid, []),
-        ))
-
-    logger.info("Loaded %d LIM visit records from %s", len(visits), visits_path)
     return visits

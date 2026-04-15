@@ -1,11 +1,3 @@
-"""
-    ML service entry point.
-    Runs separately from server/main.py on its own port (default 8001).
-    The main server calls this over HTTP whenever it needs recommendations.
-
-    Start with: uvicorn ml.api.main:app --port 8001 --reload
-"""
-
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -17,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ml.api.routes.recommend import router as recommend_router
 from ml.api.routes.profile   import router as profile_router
+from ml.api.routes.places    import router as places_router
 from ml.pipeline import MLPipeline
 
 load_dotenv()
@@ -29,16 +22,7 @@ ML_HOST = os.getenv("ML_HOST", "0.0.0.0")
 
 
 def _normalize_preference(row: dict) -> dict:
-    """
-    Maps Supabase 'preference' table columns → ML pipeline field names.
-
-    DB column         ML field
-    ─────────────── → ──────────────────
-    user_id (UUID)  → user_id (str)
-    party_type      → party_type
-    preferred_tags  → preferred_tags
-    cuisines_prefs  → cuisine_preferences  (DB uses plural 'cuisines_')
-    """
+    # DB column cuisines_preferences → ML field cuisine_preferences
     return {
         "user_id":              str(row.get("user_id", "")),
         "use_case":             row.get("use_case", ""),
@@ -57,10 +41,6 @@ def _normalize_preference(row: dict) -> dict:
 
 
 def _ratings_to_visits(ratings: list[dict]) -> list[dict]:
-    """
-    Converts rows from the 'rating' table → UserVisit records for CF training.
-    Explicit 1–5 ratings are the strongest CF signal we have.
-    """
     visits = []
     for row in ratings:
         user_id  = str(row.get("user_id", ""))
@@ -80,7 +60,18 @@ def _ratings_to_visits(ratings: list[dict]) -> list[dict]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    pipeline = MLPipeline()
+    from pathlib import Path
+    from ml.pipeline import PipelineConfig
+    from ml.models.user_profiler import MIN_SVD_USERS
+
+    artifact_path = os.getenv("PROFILER_ARTIFACT", "artifacts/user_profiler.joblib")
+
+    if Path(artifact_path).exists():
+        pipeline = MLPipeline.load(PipelineConfig(profiler_path=artifact_path))
+        logger.info("Loaded pre-trained profiler from %s", artifact_path)
+    else:
+        pipeline = MLPipeline()
+        logger.warning("No pre-trained artifact at %s — starting cold.", artifact_path)
 
     try:
         from supabase import create_client
@@ -90,18 +81,23 @@ async def lifespan(app: FastAPI):
         interactions = sb.table("user_interactions").select("*").execute().data or []
         raw_ratings  = sb.table("rating").select("*").execute().data or []
 
-        prefs = [_normalize_preference(p) for p in raw_prefs]
-
-        if prefs:
+        prefs           = [_normalize_preference(p) for p in raw_prefs]
+        implicit_visits = []
+        if interactions:
             from ml.models.user_profiler import parse_app_interactions
-            implicit_visits = parse_app_interactions(interactions, user_id=None) if interactions else []
-            explicit_visits = _ratings_to_visits(raw_ratings)
-            visits = explicit_visits + implicit_visits
-            pipeline.train_stage2(visits=visits, preferences=prefs)
-            logger.info(
-                "Pipeline trained on %d preferences, %d explicit ratings, %d implicit interactions.",
-                len(prefs), len(explicit_visits), len(implicit_visits),
-            )
+            implicit_visits = parse_app_interactions(interactions, user_id=None)
+        explicit_visits = _ratings_to_visits(raw_ratings)
+        real_visits     = explicit_visits + implicit_visits
+
+        real_interaction_users = len({v["user_id"] for v in real_visits})
+
+        if real_interaction_users >= MIN_SVD_USERS:
+            # enough real users to replace the Foursquare pre-training
+            logger.info("%d real interaction users — retraining CF on live data.", real_interaction_users)
+            pipeline.train_stage2(visits=real_visits, preferences=prefs)
+        elif prefs:
+            pipeline.train_stage2(visits=real_visits, preferences=prefs)
+            logger.info("Pipeline updated: %d preferences, %d real interactions.", len(prefs), len(real_visits))
         else:
             logger.warning("No preference data in Supabase — running in content-only mode.")
 
@@ -122,7 +118,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten this in production to the main server's URL
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,6 +126,7 @@ app.add_middleware(
 
 app.include_router(recommend_router)
 app.include_router(profile_router)
+app.include_router(places_router)
 
 
 @app.get("/health")

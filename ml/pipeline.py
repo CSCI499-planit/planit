@@ -1,9 +1,3 @@
-# ML pipeline — single entry point the backend calls.
-# Stage 1: rule-based place tagging using OSM/Geoapify categories  (active)
-# Stage 2: user embeddings via CF + content-based survey encoding  (active)
-# Stage 3: hybrid recommendation engine                             (active)
-# Stage 4: itinerary optimization — OR-Tools VRPTW                 (active)
-
 from __future__ import annotations
 
 import logging
@@ -22,11 +16,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PipelineConfig:
-    # Stage 2
     profiler_path:      str = "artifacts/user_profiler.joblib"
     user_embedding_dim: int = 48
-
-    # Stage 3
     rec_top_k:          int = 20
 
 
@@ -37,12 +28,7 @@ class MLPipeline:
         self.user_profiler = UserProfiler(embedding_dim=self.config.user_embedding_dim)
         self._recommender  = HybridRecommender()
 
-    # -------------------------------------------------------------------------
-    # Stage 1: Place Tagging  (rule-based, stateless)
-    # -------------------------------------------------------------------------
-
     def run_stage1(self, places: list[PlaceRecord]) -> list[PlaceRecord]:
-        # skip places that already have tags — don't re-tag what's already done
         logger.info("Stage 1: tagging %d places", len(places))
         tagged = []
         for p in places:
@@ -52,10 +38,6 @@ class MLPipeline:
                 tags = [tag for tag, val in rule_based_labels(p).items() if val == 1]
                 tagged.append({**p, "tags": tags})
         return tagged
-
-    # -------------------------------------------------------------------------
-    # Stage 2: User Preference Profiling
-    # -------------------------------------------------------------------------
 
     def train_stage2(
         self,
@@ -69,7 +51,6 @@ class MLPipeline:
         preference: UserPreference,
         visits:     list[UserVisit] | None = None,
     ) -> np.ndarray:
-        # returns a 48-dim embedding; falls back to content-only if no visit history
         logger.info("Stage 2: embedding user %s", preference.get("user_id", "?"))
         return self.user_profiler.embed_user(preference, visits)
 
@@ -80,16 +61,12 @@ class MLPipeline:
     ) -> list[tuple[str, float]]:
         return self.user_profiler.find_similar_users(embedding, top_k=top_k)
 
-    # -------------------------------------------------------------------------
-    # Stage 3: Recommendation Engine
-    # -------------------------------------------------------------------------
-
     def run_stage3(
         self,
         user_embedding: np.ndarray,
         tagged_places:  list[PlaceRecord],
         trip_context:   dict,
-        log_to_db:      bool = True,   # set False in tests
+        log_to_db:      bool = True,
     ) -> list[PlaceRecord]:
         logger.info(
             "Stage 3: scoring %d places (top_k=%d)",
@@ -112,7 +89,6 @@ class MLPipeline:
         ranked:  list[PlaceRecord],
         user_id: str,
     ) -> None:
-        """Persist feature vectors for each recommendation — feeds future LTR training."""
         try:
             import os
             from supabase import create_client
@@ -136,10 +112,6 @@ class MLPipeline:
         except Exception as e:
             logger.warning("Failed to log recommendations: %s", e, exc_info=True)
 
-    # -------------------------------------------------------------------------
-    # Stage 4: Route / Itinerary Optimization
-    # -------------------------------------------------------------------------
-
     def run_stage4(
         self,
         ranked_places: list[PlaceRecord],
@@ -148,10 +120,6 @@ class MLPipeline:
         from ml.models.route_optimizer import RouteOptimizer
         logger.info("Stage 4: building itinerary for %d places", len(ranked_places))
         return RouteOptimizer().optimize(ranked_places, trip_context)
-
-    # -------------------------------------------------------------------------
-    # Persistence
-    # -------------------------------------------------------------------------
 
     def save(self) -> None:
         self.user_profiler.save(self.config.profiler_path)

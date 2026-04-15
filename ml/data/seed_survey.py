@@ -1,3 +1,7 @@
+""""
+One-time script to load survey responses from CSV and insert into Supabase preference table
+"""
+
 from __future__ import annotations
 
 import csv
@@ -159,9 +163,9 @@ def transform_row(row: dict, headers: list[str]) -> dict:
 
 def main(csv_path: str, dry_run: bool = False) -> None:
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
-        reader  = csv.DictReader(f)
+        reader = csv.DictReader(f)
         headers = list(reader.fieldnames or [])
-        rows    = [transform_row(r, headers) for r in reader]
+        rows = [transform_row(r, headers) for r in reader]
 
     print(f"Transformed {len(rows)} survey responses.")
 
@@ -174,13 +178,14 @@ def main(csv_path: str, dry_run: bool = False) -> None:
         return
 
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-    result   = sb.table("preference").insert(rows).execute()
+    result = sb.table("preference").insert(rows).execute()
     inserted = len(result.data) if result.data else 0
     print(f"Inserted {inserted}/{len(rows)} rows into preference table.")
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m ml.data.seed_survey data/survey_responses.csv [--dry-run]")
+        print(
+            "Usage: python -m ml.data.seed_survey data/survey_responses.csv [--dry-run]")
         sys.exit(1)
     main(sys.argv[1], dry_run="--dry-run" in sys.argv)

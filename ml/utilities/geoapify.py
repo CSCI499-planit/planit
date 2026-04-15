@@ -1,15 +1,96 @@
-# Parses raw Geoapify API responses into PlaceRecord dicts.
+# Geoapify API calls + response parsing.
 # Everything gets normalised to the shared PlaceRecord schema before
 # entering the ML pipeline — this is the only place Geoapify JSON is touched.
 
 from __future__ import annotations
 
+import os
 import logging
+from difflib import SequenceMatcher
 from typing import Any
+
+import httpx
 
 from ml.data.preprocess import PlaceRecord
 
 logger = logging.getLogger(__name__)
+
+GEOAPIFY_KEY = os.getenv("GEOAPIFY_KEY", "")
+
+# Geoapify place categories that map well to our tag vocabulary
+FETCH_CATEGORIES = [
+    "catering.restaurant", "catering.cafe", "catering.bar",
+    "entertainment.museum",
+    "leisure.park",
+    "tourism.attraction", "tourism.sights",
+    "sport.fitness",
+    "commercial.shopping_mall", "commercial.marketplace",
+]
+
+
+def geocode_location(location: str) -> tuple[float, float]:
+    # accepts cities, neighbourhoods, hotel names, landmarks, addresses — anything Geoapify can resolve
+    resp = httpx.get(
+        "https://api.geoapify.com/v1/geocode/search",
+        params={"text": location, "limit": 1, "apiKey": GEOAPIFY_KEY},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    features = resp.json().get("features", [])
+    if not features:
+        raise ValueError(f"Location not found: {location!r}")
+    coords = features[0]["geometry"]["coordinates"]
+    return float(coords[1]), float(coords[0])  # lat, lon
+
+
+def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
+    url = (
+        f"https://api.geoapify.com/v2/places"
+        f"?categories={','.join(FETCH_CATEGORIES)}"
+        f"&filter=circle:{lon},{lat},{radius_m}"
+        f"&limit={limit}"
+        f"&apiKey={GEOAPIFY_KEY}"
+    )
+    resp = httpx.get(url, timeout=15.0)
+    resp.raise_for_status()
+    return parse_geoapify_response(resp.json())
+
+
+def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
+    from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
+    lat, lon = geocode_location(location)
+    logger.info("Geocoded %r → (%.4f, %.4f)", location, lat, lon)
+    places       = fetch_places(lat, lon, radius_m=radius_m, limit=limit)
+    osm_features = fetch_osm_features(lat, lon, radius_m=radius_m)
+    places       = enrich_places_with_osm(places, osm_features)
+    places       = _deduplicate_by_name(places)
+    logger.info("Fetched %d places for %r (after dedup)", len(places), location)
+    return places
+
+
+_DEDUP_SIMILARITY_THRESHOLD = 0.85   # Levenshtein-equivalent via SequenceMatcher
+
+
+def _deduplicate_by_name(places: list[PlaceRecord]) -> list[PlaceRecord]:
+    # Keeps only the first occurrence of each (fuzzy) name.
+    # Exact match first, then 85 % similarity check — catches chain variants like
+    # "Tully's Coffee Shibuya" vs "Tully's Coffee Harajuku" without collapsing
+    # genuinely distinct venues with short similar names (e.g. "Bar A" vs "Bar B").
+    canonical: list[str] = []
+    out: list[PlaceRecord] = []
+    for p in places:
+        key = p.get("name", "").strip().lower()
+        if not key:
+            continue
+        if any(
+            SequenceMatcher(None, key, c).ratio() >= _DEDUP_SIMILARITY_THRESHOLD
+            for c in canonical
+        ):
+            continue
+        canonical.append(key)
+        out.append(p)
+    return out
+
 
 
 def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
@@ -72,15 +153,7 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
 
 
 def normalize_db_place(row: dict[str, Any]) -> PlaceRecord:
-    """
-    Maps a Supabase 'place' table row → PlaceRecord.
-
-    DB column  ML field
-    ────────── → ──────────
-    id (UUID)  → place_id (str)
-    lat        → latitude
-    lon        → longitude
-    """
+    # maps a Supabase 'place' table row → PlaceRecord (id→place_id, lat/lon passthrough)
     return {
         "place_id":   str(row.get("id", "")),
         "name":       row.get("name", ""),

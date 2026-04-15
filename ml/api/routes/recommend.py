@@ -1,8 +1,3 @@
-"""
-    /recommend endpoint — runs a user preference through stages 1–3 and
-    returns a ranked list of places.
-"""
-
 from fastapi import APIRouter, HTTPException, Request
 
 from ml.api.schemas import RecommendRequest, RecommendResponse, ItineraryRequest, ItineraryResponse
@@ -10,11 +5,7 @@ from ml.utilities.geoapify import normalize_db_place
 
 
 def _normalize_places(places: list[dict]) -> list[dict]:
-    """
-    Normalizes place dicts coming from the API.
-    If a place came from Supabase (has 'lat'/'lon' instead of 'latitude'/'longitude'),
-    run it through normalize_db_place. Otherwise pass through unchanged.
-    """
+    # Supabase places use lat/lon; Geoapify places use latitude/longitude
     out = []
     for p in places:
         if "lat" in p and "latitude" not in p:

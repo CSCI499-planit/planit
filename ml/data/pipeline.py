@@ -1,17 +1,8 @@
-"""
-    Mock data generator for local testing and notebook demos.
-    Extract/transform functions for Geoapify and Yelp have been removed —
-    use ml/utilities/geoapify.py and ml/data/preprocess.py for production data loading.
-"""
 import random
 
 
 def create_mock_user_preference() -> dict:
-    """
-    Creates a random user preference dict for local testing.
-    Values match the ML pipeline's UserPreference TypedDict exactly —
-    wrong keys or values are silently ignored during embedding.
-    """
+    # random user preference for local testing — values match UserPreference TypedDict exactly
     use_case = ['local', 'daytrip', 'travel', 'mixed']
     party_type = ['solo', 'couple', 'friends', 'family', 'mixed']
     daily_budget_tier = [1, 2, 3, 4]

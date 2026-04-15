@@ -23,8 +23,7 @@ from ml.models.place_classifier import PLACE_TAGS
 
 logger = logging.getLogger(__name__)
 
-# these must match the preference form field values exactly — wrong values are
-# silently ignored during encoding, which is hard to debug
+# field values must match the survey form exactly — mismatches are silently ignored
 ALL_TAGS: list[str] = PLACE_TAGS   # 15 place tags from Stage 1
 
 ALL_CUISINES: list[str] = [
@@ -64,8 +63,7 @@ assert _CONTENT_DIM == EMBEDDING_DIM, (
     "Update both together or add a learned projection layer."
 )
 
-# maps Google Maps dwell time (minutes) to an implicit rating
-# short stays are likely pass-bys; long stays signal genuine interest
+# dwell time → implicit rating; short stays are likely pass-bys
 _DURATION_RATING_BREAKPOINTS: list[tuple[int, float]] = [
     (5,  1.5),   # < 5 min  — probably just drove past
     (15, 2.5),   # 5–15     — quick stop
@@ -75,14 +73,11 @@ _DURATION_RATING_BREAKPOINTS: list[tuple[int, float]] = [
 _DURATION_MAX_RATING: float = 4.5  # 90+ min
 
 
-# ---------------------------------------------------------------------------
-# Stage 4 reads this to decide how many stops to plan per day
-# ---------------------------------------------------------------------------
 
 PACE_TO_MAX_PLACES: dict[str, int] = {
     "packed":   6,
     "balanced": 4,
-    "relaxed":  2,
+    "relaxed":  3,
 }
 
 
@@ -90,9 +85,6 @@ def pace_to_max_places(pace: str) -> int:
     return PACE_TO_MAX_PLACES.get(pace.lower(), 4)
 
 
-# ---------------------------------------------------------------------------
-# Google Takeout parsers
-# ---------------------------------------------------------------------------
 
 def parse_google_takeout(
     takeout_data:   dict[str, Any] | list[dict[str, Any]],
@@ -167,9 +159,6 @@ def _duration_to_implicit_rating(minutes: float) -> float:
     return _DURATION_MAX_RATING
 
 
-# ---------------------------------------------------------------------------
-# Google Maps Reviews / Saved Places parsers
-# ---------------------------------------------------------------------------
 
 # keyword → tags for place names when we can't match to our business database
 _NAME_KEYWORDS_TO_TAGS: dict[str, list[str]] = {
@@ -276,7 +265,7 @@ def parse_google_reviews(
         if not name or rating is None:
             continue
 
-        # deduplicate — a user can review the same place more than once
+        # deduplicate
         key = name.lower()
         if key in seen:
             continue
@@ -343,22 +332,12 @@ def parse_google_saved_places(
     return visits
 
 
-# ---------------------------------------------------------------------------
-# App interaction parser
-# ---------------------------------------------------------------------------
 
 def parse_app_interactions(
     interactions: list[dict],
     user_id:      str | None = None,
     place_tag_db: dict[str, list[str]] | None = None,
 ) -> list[UserVisit]:
-    """
-    Converts rows from the user_interactions table → UserVisit records for CF training.
-
-    interactions: list of dicts from server/controllers/interactions.get_all_interactions()
-    user_id:      if None, processes all users (used for bulk training on startup)
-    place_tag_db: optional {place_id: [tag, ...]} pulled from the places table
-    """
     # import here to avoid circular dependency: server → ml → server
     from server.controllers.interactions import EVENT_RATINGS
 
@@ -403,9 +382,6 @@ def parse_app_interactions(
     return visits
 
 
-# ---------------------------------------------------------------------------
-# UserProfiler
-# ---------------------------------------------------------------------------
 
 @dataclass
 class UserProfiler:
@@ -419,8 +395,6 @@ class UserProfiler:
     _tag_index:       dict[str, int]          = field(default_factory=dict, repr=False, init=False)
     _n_trained_users: int                     = field(default=0,     repr=False, init=False)
     _is_fitted:       bool                    = field(default=False, repr=False, init=False)
-
-    # --- Training ---
 
     def fit(
         self,
@@ -488,8 +462,6 @@ class UserProfiler:
         logger.info("Fitting complete. Embedding matrix shape: %s", self._user_embeddings.shape)
         return self
 
-    # --- Inference ---
-
     def embed_user(
         self,
         preference: UserPreference,
@@ -539,8 +511,6 @@ class UserProfiler:
             for dist, idx in zip(distances[0], indices[0])
         ][:top_k]
 
-    # --- Persistence ---
-
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -552,8 +522,6 @@ class UserProfiler:
         profiler = joblib.load(path)
         logger.info("UserProfiler loaded from %s", path)
         return profiler
-
-    # --- Internal helpers ---
 
     @staticmethod
     def _cf_weight(n_users: int, target_users: int = 250) -> float:

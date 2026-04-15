@@ -1,33 +1,6 @@
-"""
-Stage 4 — Itinerary Optimization (OR-Tools VRP)
-
-Uses Google OR-Tools to solve a Vehicle Routing Problem with Time Windows (VRPTW).
-One "vehicle" per trip day. Falls back to greedy nearest-neighbor if the solver
-returns no solution (e.g. over-constrained by tight time windows).
-
-Constraints:
-  - max_places_per_day   (capacity per vehicle, derived from itinerary_pace)
-  - trip_days            (number of vehicles)
-  - travel_mode          (speed used for travel time matrix)
-  - time windows         (parsed from place hours; defaults to 9 AM–10 PM)
-
-Output shape (one entry per day):
-  {
-    "day":   1,
-    "date":  "2024-06-15",   # None if start_date not provided
-    "stops": [
-      {
-        "place":          PlaceRecord,
-        "arrival_time":   "10:00",
-        "departure_time": "11:30",
-        "travel_to_next": {"mode": "walk", "minutes": 12, "distance_m": 950}
-      }
-    ]
-  }
-
-TODO: replace default time windows with structured hours data once
-      PlaceRecord.hours is parsed into open/close times.
-"""
+# Stage 4 — Itinerary Optimization (OR-Tools VRPTW)
+# One vehicle per trip day. Falls back to greedy nearest-neighbor if OR-Tools
+# returns no solution (e.g. over-constrained by tight time windows).
 from __future__ import annotations
 
 import logging
@@ -45,22 +18,21 @@ from ml.models.user_profiler import PACE_TO_MAX_PLACES
 
 logger = logging.getLogger(__name__)
 
-# Urban travel speed estimates (km/h)
 _TRAVEL_SPEED_KMH: dict[str, float] = {
-    "walk":    5.0,
+    "walk":    4.5,
     "bike":   15.0,
     "transit": 25.0,
     "drive":   30.0,
 }
 
-# Typical dwell time per tag (minutes) — first matching tag wins
+
 _TAG_DWELL_MINUTES: dict[str, int] = {
     "quick_visit":     30,
     "food_and_drink":  60,
     "cultural":        90,
     "historical":      90,
     "outdoor":         60,
-    "scenic":          45,
+    "scenic":          60,
     "shopping":        60,
     "wellness":        60,
     "nightlife":       90,
@@ -79,10 +51,6 @@ _DAY_END_MINUTES:   int = 22 * 60   # 10:00 PM
 _VRP_SOLVER_TIME_LIMIT_SECONDS: int = 10
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
     dlat = math.radians(lat2 - lat1)
@@ -95,7 +63,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def _travel_minutes(lat1: float, lon1: float, lat2: float, lon2: float, mode: str) -> int:
     dist_km = _haversine_km(lat1, lon1, lat2, lon2)
-    speed   = _TRAVEL_SPEED_KMH.get(mode, 25.0)
+    speed = _TRAVEL_SPEED_KMH.get(mode, 25.0)
     return max(1, round((dist_km / speed) * 60))
 
 
@@ -106,25 +74,49 @@ def _dwell_minutes(place: PlaceRecord) -> int:
     return _DEFAULT_DWELL_MINUTES
 
 
-def _parse_time_window(hours: str | None) -> tuple[int, int]:
-    """
-    Best-effort parse of a raw hours string into (open, close) minutes from midnight.
-    Returns the default window (9 AM–10 PM) if parsing fails.
-    Examples handled: "09:00-21:00", "9am-9pm", "Mon-Sun 10:00-22:00"
-    """
+_CATEGORY_DEFAULT_WINDOWS: list[tuple[list[str], tuple[int, int]]] = [
+    (["entertainment.museum", "tourism.museum",
+     "cultural", "museum"],  (10 * 60, 18 * 60)),
+    (["tourism.sights", "tourism.attraction",
+     "historical"],            (8 * 60, 20 * 60)),
+    (["catering.bar", "catering.pub", "catering.nightclub",
+     "nightlife"], (18 * 60, 24 * 60)),
+    (["catering", "restaurant", "food", "coffee"],
+     (11 * 60, 22 * 60)),
+    (["leisure.park", "natural.", "leisure.garden"],
+     (6 * 60, 21 * 60)),
+    (["commercial.shopping_mall", "commercial.marketplace",
+     "shopping"], (10 * 60, 21 * 60)),
+    (["sport.fitness", "wellness"],
+     (6 * 60, 22 * 60)),
+]
+
+
+def _category_default_window(place: "PlaceRecord") -> tuple[int, int]:
+    cats = [c.lower() for c in (place.get("categories") or [])]
+    for patterns, window in _CATEGORY_DEFAULT_WINDOWS:
+        if any(any(pat in cat for cat in cats) for pat in patterns):
+            return window
+    return (_DAY_START_MINUTES, _DAY_END_MINUTES)
+
+
+def _parse_time_window(hours: str | None, place: "PlaceRecord | None" = None) -> tuple[int, int]:
+    # best-effort parse of an OSM hours string → (open, close) minutes from midnight
+    # falls back to category-aware defaults when format isn't recognised
     if not hours:
-        return (_DAY_START_MINUTES, _DAY_END_MINUTES)
+        return _category_default_window(place) if place else (_DAY_START_MINUTES, _DAY_END_MINUTES)
 
     # look for HH:MM-HH:MM or H:MM-H:MM
     m = re.search(r"(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})", hours)
     if m:
-        open_min  = int(m.group(1)) * 60 + int(m.group(2))
+        open_min = int(m.group(1)) * 60 + int(m.group(2))
         close_min = int(m.group(3)) * 60 + int(m.group(4))
         if open_min < close_min:
             return (open_min, close_min)
 
     # look for 9am-9pm style
-    m = re.search(r"(\d{1,2})(am|pm)\s*[-–]\s*(\d{1,2})(am|pm)", hours, re.IGNORECASE)
+    m = re.search(
+        r"(\d{1,2})(am|pm)\s*[-–]\s*(\d{1,2})(am|pm)", hours, re.IGNORECASE)
     if m:
         def to_24h(h: int, period: str) -> int:
             if period.lower() == "pm" and h != 12:
@@ -132,12 +124,12 @@ def _parse_time_window(hours: str | None) -> tuple[int, int]:
             if period.lower() == "am" and h == 12:
                 return 0
             return h
-        open_min  = to_24h(int(m.group(1)), m.group(2)) * 60
+        open_min = to_24h(int(m.group(1)), m.group(2)) * 60
         close_min = to_24h(int(m.group(3)), m.group(4)) * 60
         if open_min < close_min:
             return (open_min, close_min)
 
-    return (_DAY_START_MINUTES, _DAY_END_MINUTES)
+    return _category_default_window(place) if place else (_DAY_START_MINUTES, _DAY_END_MINUTES)
 
 
 def _minutes_to_time(minutes: int) -> str:
@@ -146,23 +138,41 @@ def _minutes_to_time(minutes: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
-# ---------------------------------------------------------------------------
-# Greedy fallback (used when OR-Tools returns no solution)
-# ---------------------------------------------------------------------------
+def _parse_max_travel_minutes(raw: str) -> int:
+    raw = str(raw).strip().lower()
+    if "< 10" in raw or "<10" in raw:
+        return 10
+    if "10" in raw and "20" in raw:
+        return 20
+    if "20" in raw and "40" in raw:
+        return 40
+    return 90  # "> 40" or unrecognised gives generous cap
 
-def _nearest_neighbor_order(places: list[PlaceRecord]) -> list[PlaceRecord]:
+
+def _nearest_neighbor_order(
+    places:         list[PlaceRecord],
+    mode:           str = "transit",
+    max_travel_min: int = 90,
+) -> list[PlaceRecord]:
     if len(places) <= 1:
         return list(places)
     remaining = list(places)
-    ordered   = [remaining.pop(0)]
+    ordered = [remaining.pop(0)]
     while remaining:
-        last     = ordered[-1]
-        best_idx = min(
-            range(len(remaining)),
-            key=lambda i: _haversine_km(
-                last["latitude"],         last["longitude"],
+        last = ordered[-1]
+        travel_times = [
+            _travel_minutes(
+                last["latitude"], last["longitude"],
                 remaining[i]["latitude"], remaining[i]["longitude"],
-            ),
+                mode,
+            )
+            for i in range(len(remaining))
+        ]
+        # prefer places within the user's travel budget; fall back to nearest if none qualify
+        within = [(i, t) for i, t in enumerate(
+            travel_times) if t <= max_travel_min]
+        best_idx = min(within, key=lambda x: x[1])[0] if within else int(
+            min(range(len(remaining)), key=lambda i: travel_times[i])
         )
         ordered.append(remaining.pop(best_idx))
     return ordered
@@ -175,32 +185,22 @@ def _build_day(
     start_date: str | None,
     arrival_times: list[int] | None = None,
 ) -> dict:
-    """Assemble a day dict from an ordered list of places and optional arrival times (minutes from midnight)."""
     stops: list[dict] = []
+    _greedy_time = _DAY_START_MINUTES  # running clock for greedy mode
+
     for i, place in enumerate(places):
         if arrival_times:
             arr_min = arrival_times[i]
         else:
-            # greedy: accumulate from day start
-            arr_min = _DAY_START_MINUTES
-            if i > 0:
-                prev      = places[i - 1]
-                prev_arr  = arrival_times[i - 1] if arrival_times else _DAY_START_MINUTES
-                prev_dep  = prev_arr + _dwell_minutes(prev)
-                t_min     = _travel_minutes(
-                    prev["latitude"], prev["longitude"],
-                    place["latitude"], place["longitude"],
-                    mode,
-                )
-                arr_min = prev_dep + t_min
+            arr_min = _greedy_time
 
-        dwell   = _dwell_minutes(place)
+        dwell = _dwell_minutes(place)
         dep_min = arr_min + dwell
 
         travel_to_next = None
         if i < len(places) - 1:
-            nxt    = places[i + 1]
-            t_min  = _travel_minutes(
+            nxt = places[i + 1]
+            t_min = _travel_minutes(
                 place["latitude"], place["longitude"],
                 nxt["latitude"],   nxt["longitude"],
                 mode,
@@ -209,7 +209,10 @@ def _build_day(
                 place["latitude"], place["longitude"],
                 nxt["latitude"],   nxt["longitude"],
             ) * 1000)
-            travel_to_next = {"mode": mode, "minutes": t_min, "distance_m": dist_m}
+            travel_to_next = {"mode": mode,
+                              "minutes": t_min, "distance_m": dist_m}
+            if not arrival_times:
+                _greedy_time = dep_min + t_min
 
         stops.append({
             "place":          place,
@@ -221,7 +224,7 @@ def _build_day(
     date_str: str | None = None
     if start_date:
         try:
-            base     = datetime.strptime(start_date, "%Y-%m-%d")
+            base = datetime.strptime(start_date, "%Y-%m-%d")
             date_str = (base + timedelta(days=day_idx)).strftime("%Y-%m-%d")
         except ValueError:
             pass
@@ -230,26 +233,73 @@ def _build_day(
 
 
 def _greedy_fallback(candidates: list[PlaceRecord], trip_context: dict) -> list[dict]:
-    pace        = trip_context.get("itinerary_pace", "balanced")
+    pace = trip_context.get("itinerary_pace", "balanced")
     max_per_day = PACE_TO_MAX_PLACES.get(pace, 4)
-    modes       = trip_context.get("travel_mode") or ["transit"]
-    mode        = modes[0] if isinstance(modes, list) else modes
-    trip_days   = int(trip_context.get("trip_days", 1))
-    start_date  = trip_context.get("start_date")
+    modes = trip_context.get("travel_mode") or ["transit"]
+    mode = modes[0] if isinstance(modes, list) else modes
+    trip_days = int(trip_context.get("trip_days", 1))
+    start_date = trip_context.get("start_date")
+    max_travel_min = _parse_max_travel_minutes(
+        trip_context.get("max_travel_minutes", "> 40"))
 
     days_out = []
     for day_idx in range(trip_days):
-        day_places = candidates[day_idx * max_per_day : (day_idx + 1) * max_per_day]
+        day_places = candidates[day_idx *
+                                max_per_day: (day_idx + 1) * max_per_day]
         if not day_places:
             break
-        ordered = _nearest_neighbor_order(day_places)
+        ordered = _nearest_neighbor_order(
+            day_places, mode=mode, max_travel_min=max_travel_min)
         days_out.append(_build_day(ordered, day_idx, mode, start_date))
     return days_out
 
 
-# ---------------------------------------------------------------------------
-# RouteOptimizer
-# ---------------------------------------------------------------------------
+def _ensure_food_stop(
+    ranked_places: list[PlaceRecord],
+    total_slots:   int,
+    trip_days:     int,
+) -> list[PlaceRecord]:
+
+    slots_per_day = total_slots // trip_days if trip_days else total_slots
+    candidates = list(ranked_places[:total_slots])
+    used_ids = {p.get("place_id") for p in candidates}
+
+    for day in range(trip_days):
+        day_start = day * slots_per_day
+        day_end = day_start + slots_per_day
+        day_slice = candidates[day_start:day_end]
+
+        has_food = any("food_and_drink" in (p.get("tags") or [])
+                       for p in day_slice)
+        if has_food:
+            continue
+
+        # find the best food place not already in candidates
+        food_place = next(
+            (p for p in ranked_places
+             if "food_and_drink" in (p.get("tags") or [])
+             and p.get("place_id") not in used_ids),
+            None,
+        )
+        if food_place is None:
+            continue
+
+        non_food_idxs = [
+            i for i, p in enumerate(day_slice)
+            if "food_and_drink" not in (p.get("tags") or [])
+        ]
+        if not non_food_idxs:
+            continue
+
+        replace_idx = day_start + non_food_idxs[-1]  # last = lowest ranked
+        used_ids.discard(candidates[replace_idx].get("place_id"))
+        candidates[replace_idx] = food_place
+        used_ids.add(food_place.get("place_id"))
+        logger.info("Injected food stop '%s' into day %d.",
+                    food_place.get("name"), day + 1)
+
+    return candidates
+
 
 class RouteOptimizer:
 
@@ -258,32 +308,35 @@ class RouteOptimizer:
         ranked_places: list[PlaceRecord],
         trip_context:  dict,
     ) -> list[dict]:
-        pace        = trip_context.get("itinerary_pace", "balanced")
+        pace = trip_context.get("itinerary_pace", "balanced")
         max_per_day = PACE_TO_MAX_PLACES.get(pace, 4)
-        modes       = trip_context.get("travel_mode") or ["transit"]
-        mode        = modes[0] if isinstance(modes, list) else modes
-        trip_days   = int(trip_context.get("trip_days", 1))
-        start_date  = trip_context.get("start_date")
+        modes = trip_context.get("travel_mode") or ["transit"]
+        mode = modes[0] if isinstance(modes, list) else modes
+        trip_days = int(trip_context.get("trip_days", 1))
+        start_date = trip_context.get("start_date")
+        max_travel_min = _parse_max_travel_minutes(
+            trip_context.get("max_travel_minutes", "> 40"))
 
-        candidates = ranked_places[: max_per_day * trip_days]
+        candidates = _ensure_food_stop(
+            ranked_places, max_per_day * trip_days, trip_days
+        )
         if not candidates:
             return []
         if len(candidates) == 1:
             return [_build_day(candidates, 0, mode, start_date)]
 
-        # --- Build OR-Tools data model ---
-        # Node 0 = virtual depot (centroid of all candidates)
-        # Nodes 1..N = candidate places
-        all_lats  = [p.get("latitude", 0.0)  for p in candidates]
-        all_lons  = [p.get("longitude", 0.0) for p in candidates]
+        all_lats = [p.get("latitude", 0.0) for p in candidates]
+        all_lons = [p.get("longitude", 0.0) for p in candidates]
         depot_lat = sum(all_lats) / len(all_lats)
         depot_lon = sum(all_lons) / len(all_lons)
 
-        locations = [(depot_lat, depot_lon)] + [(p.get("latitude", 0.0), p.get("longitude", 0.0)) for p in candidates]  # type: ignore[typeddict-item]
-        n         = len(locations)
-        speed     = _TRAVEL_SPEED_KMH.get(mode, 25.0)
+        locations = [(depot_lat, depot_lon)] + [(p.get("latitude",
+                                                       0.0), p.get("longitude", 0.0)) for p in candidates]
+        n = len(locations)
+        speed = _TRAVEL_SPEED_KMH.get(mode, 25.0)
 
-        # Integer travel time matrix (minutes)
+        _LONG_ARC_PENALTY = 10_000
+
         time_matrix: list[list[int]] = []
         for i in range(n):
             row = []
@@ -293,35 +346,36 @@ class RouteOptimizer:
                 else:
                     dist_km = _haversine_km(locations[i][0], locations[i][1],
                                             locations[j][0], locations[j][1])
-                    row.append(max(1, round((dist_km / speed) * 60)))
+                    raw_time = max(1, round((dist_km / speed) * 60))
+
+                    if i != 0 and j != 0 and raw_time > max_travel_min:
+                        row.append(raw_time + _LONG_ARC_PENALTY)
+                    else:
+                        row.append(raw_time)
             time_matrix.append(row)
 
-        # Service (dwell) times — 0 for depot
         service_times = [0] + [_dwell_minutes(p) for p in candidates]
 
-        # Time windows (minutes from midnight); depot fixed at day start
-        time_windows = [(_DAY_START_MINUTES, _DAY_START_MINUTES)]  # depot
+        time_windows = [(_DAY_START_MINUTES, _DAY_START_MINUTES)]
         for p in candidates:
-            time_windows.append(_parse_time_window(p.get("hours")))
+            time_windows.append(_parse_time_window(p.get("hours"), p))
 
-        # --- OR-Tools setup ---
         manager = pywrapcp.RoutingIndexManager(n, trip_days, 0)
         routing = pywrapcp.RoutingModel(manager)
 
         def time_callback(from_index: int, to_index: int) -> int:
             from_node = manager.IndexToNode(from_index)
-            to_node   = manager.IndexToNode(to_index)
+            to_node = manager.IndexToNode(to_index)
             return time_matrix[from_node][to_node] + service_times[from_node]
 
         transit_idx = routing.RegisterTransitCallback(time_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_idx)
 
-        # Time dimension — absolute minutes from midnight
         routing.AddDimension(
             transit_idx,
-            60,          # max waiting slack (1 hour)
-            24 * 60,     # max time per vehicle (24 h ceiling)
-            False,  # don't force start cumul to zero — we use absolute times
+            60,
+            24 * 60,
+            False,
             "Time",
         )
         time_dim = routing.GetDimensionOrDie("Time")
@@ -330,7 +384,6 @@ class RouteOptimizer:
             index = manager.NodeToIndex(node_idx)
             time_dim.CumulVar(index).SetRange(tw_open, tw_close)
 
-        # Fix each vehicle's start to exactly _DAY_START_MINUTES
         for v in range(trip_days):
             time_dim.CumulVar(routing.Start(v)).SetRange(
                 _DAY_START_MINUTES, _DAY_START_MINUTES
@@ -339,7 +392,6 @@ class RouteOptimizer:
                 _DAY_START_MINUTES, _DAY_END_MINUTES
             )
 
-        # Capacity: max stops per vehicle
         def demand_callback(from_index: int) -> int:
             return 0 if manager.IndexToNode(from_index) == 0 else 1
 
@@ -352,7 +404,6 @@ class RouteOptimizer:
             "Capacity",
         )
 
-        # Search parameters
         params = pywrapcp.DefaultRoutingSearchParameters()
         params.first_solution_strategy = (
             routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -365,15 +416,14 @@ class RouteOptimizer:
         solution = routing.SolveWithParameters(params)
 
         if not solution:
-            logger.warning("OR-Tools returned no solution — falling back to greedy ordering.")
+            logger.warning(
+                "OR-Tools returned no solution — falling back to greedy ordering.")
             return _greedy_fallback(candidates, trip_context)
 
         return self._extract_solution(
             manager, routing, solution, candidates,
             time_dim, trip_days, mode, start_date,
         )
-
-    # --- Solution extraction ---
 
     @staticmethod
     def _extract_solution(
@@ -390,14 +440,15 @@ class RouteOptimizer:
 
         for vehicle in range(trip_days):
             ordered:       list[PlaceRecord] = []
-            arrival_times: list[int]         = []
+            arrival_times: list[int] = []
 
             index = routing.Start(vehicle)
             while not routing.IsEnd(index):
                 node = manager.IndexToNode(index)
-                if node != 0:  # skip depot
+                if node != 0:
                     ordered.append(candidates[node - 1])
-                    arrival_times.append(solution.Min(time_dim.CumulVar(index)))
+                    arrival_times.append(
+                        solution.Min(time_dim.CumulVar(index)))
                 index = solution.Value(routing.NextVar(index))
 
             if not ordered:

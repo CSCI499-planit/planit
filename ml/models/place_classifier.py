@@ -100,13 +100,8 @@ PLACE_TAGS: list[str] = [
 TAG_INDEX: dict[str, int] = {tag: i for i, tag in enumerate(PLACE_TAGS)}
 
 
-# ---------------------------------------------------------------------------
-# Feature extraction — turns a PlaceRecord into a numeric vector for the
-# random forest classifier
-# ---------------------------------------------------------------------------
 
 class PlaceFeatureExtractor:
-    # 23 features: 9 category flags, 3 numeric, 7 attribute flags, 4 hours flags
     FEATURE_NAMES: list[str] = [
         "cat_food_drink", "cat_outdoor", "cat_cultural", "cat_nightlife",
         "cat_shopping", "cat_wellness", "cat_tourism", "cat_sport", "cat_nature",
@@ -116,8 +111,6 @@ class PlaceFeatureExtractor:
         "hours_late", "hours_early", "hours_weekend", "hours_always",
     ]
 
-    # category string patterns that count toward each category flag
-    # works for both Geoapify dot-notation ("catering.restaurant") and Foursquare names
     _CAT_GROUPS: dict[str, list[str]] = {
         "cat_food_drink": ["catering", "restaurants", "food", "coffee"],
         "cat_outdoor":    ["leisure", "natural", "beaches", "parks", "hiking"],
@@ -186,10 +179,6 @@ class PlaceFeatureExtractor:
         return self.FEATURE_NAMES
 
 
-# ---------------------------------------------------------------------------
-# Rule-based labelling — generates training labels from categories + attributes
-# Used to bootstrap training before human-labelled data is available
-# ---------------------------------------------------------------------------
 
 def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
     labels     = {tag: 0 for tag in PLACE_TAGS}
@@ -226,11 +215,14 @@ def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
 
     if _has_cat("tourism.sights", "tourism.museum", "landmarks", "historical"):
         labels["historical"] = 1
+    if attrs.get("OSMHistoric"):
+        labels["historical"] = 1
+        labels["scenic"] = 1   # historic sites are almost always scenic
 
     if _has_cat("leisure.playground", "entertainment.theme_park",
                 "entertainment.zoo", "entertainment.aquarium"):
         labels["family_friendly"] = 1
-    if _bool_attr("GoodForKids"):
+    if _bool_attr("GoodForKids") or _bool_attr("OSMPlayground"):
         labels["family_friendly"] = 1
 
     if _has_cat("commercial", "shopping"):
@@ -242,20 +234,35 @@ def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
     if _has_cat("natural.beach", "natural.mountain", "natural.forest",
                 "leisure.garden", "tourism.attraction", "tourism.sights", "landmarks"):
         labels["scenic"] = 1
+    if _bool_attr("OSMViewpoint") or _bool_attr("OSMGarden"):
+        labels["scenic"] = 1
+    osm_natural = str(attrs.get("OSMNatural", "")).lower()
+    if osm_natural in ("peak", "waterfall", "cliff", "beach", "wood", "forest"):
+        labels["scenic"] = 1
+        labels["outdoor"] = 1
+        if osm_natural in ("peak", "waterfall", "cliff"):
+            labels["adventurous"] = 1
 
     if _has_cat("sport.hiking", "sport.climbing", "sport.skiing", "sport.cycling",
                 "natural.mountain", "natural.", "active life", "hiking", "climbing"):
         labels["adventurous"] = 1
+    osm_sport = str(attrs.get("OSMSport", "")).lower()
+    if any(s in osm_sport for s in ("climbing", "hiking", "skiing", "surfing", "mountaineering")):
+        labels["adventurous"] = 1
+        labels["outdoor"] = 1
 
     if _bool_attr("DogsAllowed"):
         labels["pet_friendly"] = 1
 
     if _bool_attr("Romantic"):
         labels["romantic"] = 1
-    if _has_cat("leisure.garden", "catering.restaurant") and price and price >= 3 and rating >= 4.0:
+    if (_has_cat("leisure.garden", "catering.restaurant") or _bool_attr("OSMGarden")) \
+            and price and price >= 3 and rating >= 4.0:
         labels["romantic"] = 1
 
     if price == 1 or _has_cat("catering.fast_food", "commercial.supermarket", "leisure.playground"):
+        labels["budget_friendly"] = 1
+    if attrs.get("FeeRequired") is False:
         labels["budget_friendly"] = 1
 
     if price and price >= 3:
