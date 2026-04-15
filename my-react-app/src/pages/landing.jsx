@@ -9,7 +9,10 @@ export default function LandingPage() {
     const globe = globeRef.current
     let frame
     const animate = (ts) => {
-      globe.style.transform = `translateY(${Math.sin(ts / 4000) * 6}px)`
+      globe.style.transform = `
+        translateY(${Math.sin(ts / 4000) * 6}px)
+        translateX(${Math.cos(ts / 5000) * 4}px)
+      `
       frame = requestAnimationFrame(animate)
     }
     frame = requestAnimationFrame(animate)
@@ -20,7 +23,8 @@ export default function LandingPage() {
     <section className="hero">
       <div className="hero__content">
         <h1 className="hero__headline">
-          Your next trip,<br /><em>planned in seconds!</em>
+          Your next trip,<br />
+          <em>planned in seconds!</em>
         </h1>
         <p className="hero__sub">Not hours.</p>
         <p className="hero__body">
