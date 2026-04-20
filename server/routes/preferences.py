@@ -1,10 +1,9 @@
 """
-    user preference route to store user preferences
+    user preference route to store user preferences survey input
 """
-from fastapi import APIRouter, Depends,HTTPException
+from fastapi import APIRouter,HTTPException,Depends
 from postgrest.exceptions import APIError
-from datetime import datetime
-from uuid import uuid4
+from supabase import Client
 from server.config.db import get_db_client, get_current_user
 from server.models.preferences import preferenceInput
 
@@ -12,15 +11,13 @@ PREFERENCE_TABLE = 'preference'
 router = APIRouter(prefix="/preference",tags=["preference"])
 
 @router.post("/")
-async def post_preference(data:preferenceInput, user = Depends(get_current_user), client = Depends(get_db_client)):
+async def post_preference(data:preferenceInput, user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
         post user preference data
     """
     try:
         preference = data.model_dump()
-        preference['id'] = uuid4()
         preference['user_id'] = user.user.id
-        preference['created_at'] = datetime.now()
         response = (
             client.table(PREFERENCE_TABLE)
             .insert(preference)
@@ -31,7 +28,7 @@ async def post_preference(data:preferenceInput, user = Depends(get_current_user)
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.get("/")
-async def get_preference(client = Depends(get_db_client), user=Depends(get_current_user)):
+async def get_preference(client:Client = Depends(get_db_client), user=Depends(get_current_user)):
     """
         get user's preference form
     """
@@ -47,7 +44,7 @@ async def get_preference(client = Depends(get_db_client), user=Depends(get_curre
         raise HTTPException(status_code=400,detail=str(e.message))
     
 @router.put("/")
-async def update_preference(data:preferenceInput, client = Depends(get_db_client), user=Depends(get_current_user)):
+async def update_preference(data:preferenceInput, client:Client = Depends(get_db_client), user=Depends(get_current_user)):
     """
         update user's preference
     """
@@ -64,7 +61,7 @@ async def update_preference(data:preferenceInput, client = Depends(get_db_client
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.delete("/")
-async def delete_preference(client = Depends(get_db_client), user=Depends(get_current_user)):
+async def delete_preference(client:Client = Depends(get_db_client), user=Depends(get_current_user)):
     """
         delete user's preference data
     """

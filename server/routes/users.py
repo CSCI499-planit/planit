@@ -1,44 +1,66 @@
 """
-    user account route to store account details
+    user route to store user account details
 """
-from fastapi import APIRouter, Depends,HTTPException
+from fastapi import APIRouter,HTTPException,Depends
 from postgrest.exceptions import APIError
-import bcrypt
-from datetime import datetime
-from uuid import uuid4
+from supabase import Client
 from server.config.db import get_db_client,get_current_user
 from server.models.users import userInput
 
-USER_TABLE = 'users'
-router = APIRouter(prefix="/users",tags=["users"])
+USER_TABLE = 'user'
+router = APIRouter(prefix='/user',tags=['user'])
 
-def user_exist(id, client =  Depends(get_db_client)):
+def user_exist(id:str, client:Client =  Depends(get_db_client)):
     user = client.table(USER_TABLE).select('*').eq('id',id).execute()
     return len(user.data) > 0
 
-@router.post("/")
-async def create_user(data:userInput, user = Depends(get_current_user), client = Depends(get_db_client)):
+@router.post("/signup")
+async def sign_up(user_details:dict[str,str], client:Client =  Depends(get_db_client)):
     """
-        create user
+        sign up a user\\
+        user_details example: {email: example@email.com, password: password123, name:username}
     """
+    client.auth.sign_up({
+        "email":user_details['email'],
+        "password": user_details['password'],
+        "options":{
+            "data":{"name":user_details['name']}
+        }
+    })
+
+@router.post("/signin")
+async def sign_in(user_details, client:Client =  Depends(get_db_client)):
+    """
+        sign in a user \\
+        user_details example: {email: example@email.com, password: password123}
+    """
+    client.auth.sign_in_with_password({
+        "email":user_details['email'],
+        "password": user_details['password']
+    })
+
+@router.post("/signout")
+async def sign_out(client:Client =  Depends(get_db_client)):
+    """
+        sign out a user
+    """
+    client.auth.sign_out()
+
+@router.get('/users')
+async def get_all_users(client:Client = Depends(get_db_client)):
     try:
-        if user_exist(user.user.id):
-            return {'message': 'user already exist'}
-        user_data = data.model_dump()
-        user_data['id'] = uuid4()
-        user_data['password'] = bcrypt.hashpw(user_data['password'], bcrypt.gensalt())
-        user_data['created_at'] = datetime.now()
-        response = (
+        response =(
             client.table(USER_TABLE)
-            .insert(user_data)
+            .select('*')
+            .limit(100)
             .execute()
         )
-        return {"status":"success",'message': 'user created',"data":response.data}
+        return {"data": response.data}
     except APIError as e:
         raise HTTPException(status_code=400,detail=str(e.message))
-    
+
 @router.get("/")
-async def get_user(user = Depends(get_current_user), client = Depends(get_db_client)):
+async def get_user(user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
         get user data
     """
@@ -54,7 +76,7 @@ async def get_user(user = Depends(get_current_user), client = Depends(get_db_cli
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.put("/")
-async def update_user(data:userInput, user = Depends(get_current_user), client = Depends(get_db_client)):
+async def update_user(data:userInput, user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
         update user data
     """
@@ -72,7 +94,7 @@ async def update_user(data:userInput, user = Depends(get_current_user), client =
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.delete("/")
-async def delete_user(user = Depends(get_current_user), client = Depends(get_db_client)):
+async def delete_user(user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
         delete user data
     """

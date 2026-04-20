@@ -1,16 +1,17 @@
 """
-    places route for users to save places
+    places route 
 """
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter,HTTPException,Depends
 from postgrest.exceptions import APIError
+from supabase import Client
 from server.config.db import get_db_client
 from server.models.places import placeInput
 
-PLACE_TABLE = 'places'
+PLACE_TABLE = 'place'
 router = APIRouter(prefix="/places", tags=["places"])
 
 @router.post("/")
-async def create_place(data:placeInput, client = Depends(get_db_client)):
+async def create_place(data:placeInput, client: Client = Depends(get_db_client)):
     """
         add place details
     """
@@ -26,9 +27,9 @@ async def create_place(data:placeInput, client = Depends(get_db_client)):
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.get("/{id}")
-async def get_place(id, client = Depends(get_db_client)):
+async def get_place(id, client:Client = Depends(get_db_client)):
     """
-        get place details
+        get all saved place details
     """
     try:
         response = (
@@ -42,7 +43,7 @@ async def get_place(id, client = Depends(get_db_client)):
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.put("/{id}")
-async def update_place(id, data:placeInput,client = Depends(get_db_client)):
+async def update_place(id, data:placeInput,client:Client = Depends(get_db_client)):
     """
         update place details
     """
@@ -59,9 +60,9 @@ async def update_place(id, data:placeInput,client = Depends(get_db_client)):
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.delete("/{id}")
-async def delete_place(id, client = Depends(get_db_client)):
+async def delete_place(id, client:Client = Depends(get_db_client)):
     """
-        delete place details
+        delete a saved place
     """
     try:
         response = (

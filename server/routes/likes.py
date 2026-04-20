@@ -1,26 +1,23 @@
 """
-    user ratings route for users to rate places
+    user ratings route to save users rating of places
 """
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter,HTTPException,Depends
 from postgrest.exceptions import APIError
-from datetime import datetime
-from uuid import uuid4
+from supabase import Client
 from server.config.db import get_db_client,get_current_user
 from server.models.likes import ratingsInput
 
-RATINGS_TABLE = 'user_ratings'
+RATINGS_TABLE = 'rating'
 router = APIRouter(prefix="/ratings",tags=["ratings"])
 
 @router.post("/")
-async def post_rating(data:ratingsInput, user = Depends(get_current_user), client = Depends(get_db_client)):
+async def post_rating(data:ratingsInput, user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
-        post user ratings
+        post a user's rating of a place
     """
     try:
         rating = data.model_dump()
-        rating['id'] = uuid4()
         rating['user_id'] = user.user.id
-        rating['created_at'] = datetime.now()
         response = (
             client.table(RATINGS_TABLE)
             .insert(rating)
@@ -31,9 +28,9 @@ async def post_rating(data:ratingsInput, user = Depends(get_current_user), clien
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.get("/")
-async def get_rating(user = Depends(get_current_user), client = Depends(get_db_client)):
+async def get_rating(user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
-        get user ratings
+        get all of user's ratings
     """
     try:
         response = (
@@ -46,16 +43,17 @@ async def get_rating(user = Depends(get_current_user), client = Depends(get_db_c
     except APIError as e:
         raise HTTPException(status_code=400,detail=str(e.message))
 
-@router.put("/")
-async def update_rating(data:ratingsInput, user = Depends(get_current_user), client = Depends(get_db_client)):
+@router.put("/{id}")
+async def update_rating(id:str,data:ratingsInput, user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
-        update user rating
+        update a user's rating of a place
     """
     try:
         rating = data.model_dump()
         response = (
             client.table(RATINGS_TABLE)
             .update(rating)
+            .eq('id',id)
             .eq('user_id',user.user.id)
             .execute()
         )
@@ -64,9 +62,9 @@ async def update_rating(data:ratingsInput, user = Depends(get_current_user), cli
         raise HTTPException(status_code=400,detail=str(e.message))
 
 @router.delete("/{id}")
-async def delete_rating(id,user = Depends(get_current_user), client = Depends(get_db_client)):
+async def delete_rating(id:str,user = Depends(get_current_user), client:Client = Depends(get_db_client)):
     """
-        delete user ratings
+        delete a user's rating of a place
     """
     try:
         response = (
