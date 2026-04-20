@@ -1,9 +1,20 @@
-Loading users from Supabase …
-Loading pipeline from artifacts/user_profiler.joblib …
-Pipeline ready.
+ML service: https://planit-3q0m.onrender.com
+Loading users from Supabase ...
+Loaded 29 users.
+
+Service health: {'status': 'ok', 'pipeline_loaded': True}
+
+Fetching places for 'Shibuya, Tokyo' ...
+  28 places
+
+Fetching places for 'Bedford Avenue, Williamsburg, Brooklyn' ...
+  40 places
+
+Fetching places for 'Trastevere, Rome' ...
+  39 places
 
 ================================================================
-  USER  f6c8cf87…
+  USER  f6c8cf87...
 ================================================================
   Party:          solo
   Pace:           packed
@@ -13,35 +24,35 @@ Pipeline ready.
   Gets around by: walk, transit
   Max travel:     20-40 between stops
 
-  ── Shibuya, Tokyo ────────────────────────────────────
+  -- Shibuya, Tokyo ------------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:56–10:26  日本近代文学館                                [budget_friendly, cultural, historical, scenic]  →  2 min walk (114m)
-  11:28–11:58  駒場公園                                   [budget_friendly, outdoor, historical, scenic]  →  30 min walk (2263m)
-  13:28–14:28  代官山 T-SITE                             [outdoor, shopping, historical, scenic]  →  15 min walk (1154m)
-  15:43–16:43  Shibuya 109                            [shopping, historical, scenic]  →  17 min walk (1264m)
-  18:00–19:30  カフェ・ラ・ボエム                              [nightlife, food_and_drink, historical, scenic]  →  7 min walk (511m)
-  19:37–20:37  gyre                                   [outdoor, shopping, historical, scenic]
+  09:30-11:00  日本近代文学館                                [cultural]  ->  28 min walk (2095m)
+  11:28-12:28  渋谷ヒカリエ                                 [shopping]  ->  39 min walk (2927m)
+  13:07-14:07  新宿御苑                                   [outdoor]  ->  22 min walk (1635m)
+  14:29-15:59  ワタリウム美術館                               [cultural]  ->  26 min walk (1949m)
+  16:25-17:55  山種美術館                                  [cultural]  ->  23 min walk (1702m)
+  18:18-19:48  名曲喫茶ライオン                               [nightlife, food_and_drink, quick_visit]
 
-  ── Bedford Avenue, Williamsburg, Brooklyn ────────────
+  -- Bedford Avenue, Williamsburg, Brooklyn ------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:29–10:29  Olive Street Community Garden          [outdoor]  →  17 min walk (1293m)
-  10:46–11:46  Monsignor McGolrick Park               [outdoor]  →  27 min walk (2059m)
-  12:13–13:13  Notorious LIC Park                     [outdoor]  →  38 min walk (2874m)
-  13:51–15:21  Museum of Reclaimed Urban Space        [cultural]  →  10 min walk (716m)
-  15:31–17:01  Clinton St. Baking Company             [nightlife, food_and_drink, shopping]  →  24 min walk (1829m)
-  17:25–18:25  Marsha P. Johnson State Park           [outdoor]
+  09:50-10:50  Clinton St. Baking Company             [outdoor, nightlife, food_and_drink, shopping, historical, scenic, pet_friendly]  ->  10 min walk (716m)
+  12:00-13:30  Museum of Reclaimed Urban Space        [cultural, outdoor, scenic]  ->  19 min walk (1393m)
+  13:49-14:19  Marsha P. Johnson State Park           [budget_friendly, outdoor, scenic]  ->  22 min walk (1615m)
+  14:41-15:11  Monsignor McGolrick Park               [budget_friendly, outdoor, historical, scenic]  ->  35 min walk (2608m)
+  15:46-16:16  Bartlett Playground                    [budget_friendly, outdoor, scenic]  ->  23 min walk (1701m)
+  16:39-17:09  Bedford Playground                     [budget_friendly, outdoor, scenic]
 
-  ── Trastevere, Rome ──────────────────────────────────
+  -- Trastevere, Rome ----------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:03–09:33  Nuovo Mercato Testaccio                [budget_friendly, shopping]  →  21 min walk (1562m)
-  10:00–11:30  Museo della Repubblica Romana e della memoria garibaldina [cultural, historical, scenic]  →  14 min walk (1018m)
-  11:44–12:44  Pizzeria ai Marmi                      [outdoor, nightlife, food_and_drink, historical, scenic]  →  21 min walk (1582m)
-  13:05–13:35  Polo museale ATAC Porta San Paolo      [budget_friendly, cultural, outdoor]  →  13 min walk (988m)
-  13:48–15:18  Centrale Montemartini                  [cultural, historical, scenic]  →  12 min walk (879m)
-  15:30–16:00  Basilica di San Paolo fuori le mura    [budget_friendly, historical, scenic]
+  10:00-11:30  Polo museale ATAC Porta San Paolo      [cultural]  ->  9 min walk (683m)
+  11:39-12:39  Nuovo Mercato Testaccio                [shopping]  ->  23 min walk (1748m)
+  13:02-14:02  Orto Botanico                          [outdoor]  ->  37 min walk (2776m)
+  14:39-16:09  Terme di Caracalla                     [historical, scenic]  ->  13 min walk (972m)
+  16:22-17:52  Eataly Roma                            [nightlife, food_and_drink, shopping]  ->  22 min walk (1616m)
+  18:14-19:44  Basilica di San Paolo fuori le mura    [historical, scenic]
 
 ================================================================
-  USER  dc51cbb4…
+  USER  dc51cbb4...
 ================================================================
   Party:          couple
   Pace:           balanced
@@ -51,29 +62,29 @@ Pipeline ready.
   Gets around by: walk, transit
   Max travel:     20-40 between stops
 
-  ── Shibuya, Tokyo ────────────────────────────────────
+  -- Shibuya, Tokyo ------------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:00–10:30  焼肉　牛宮城                                 [nightlife, food_and_drink]  →  16 min walk (1177m)
-  10:46–11:46  double 4                               [outdoor, food_and_drink]  →  1 min walk (61m)
-  11:47–13:17  カフェ・ラ・ボエム                              [nightlife, food_and_drink, historical, scenic]  →  30 min walk (2214m)
-  13:47–14:47  ドトールコーヒーショップ                           [food_and_drink, quick_visit]
+  09:00-10:00  double 4                               [food_and_drink]  ->  15 min walk (1128m)
+  10:15-11:45  焼肉 誇味山                                 [nightlife, food_and_drink]  ->  30 min walk (2222m)
+  12:15-13:45  焼肉　牛宮城                                 [nightlife, food_and_drink]  ->  19 min walk (1446m)
+  14:04-15:34  スターバックス                                [nightlife, food_and_drink, pet_friendly, quick_visit]
 
-  ── Bedford Avenue, Williamsburg, Brooklyn ────────────
+  -- Bedford Avenue, Williamsburg, Brooklyn ------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:00–10:30  Meadowsweet                            [nightlife, food_and_drink]  →  28 min walk (2068m)
-  10:58–11:58  Parkside Lounge                        [food_and_drink]  →  29 min walk (2212m)
-  12:27–13:27  Taku Sando                             [food_and_drink]  →  2 min walk (125m)
-  13:29–14:29  Kettl                                  [food_and_drink, shopping, quick_visit]
+  09:00-10:00  Meadowsweet                            [outdoor, nightlife, food_and_drink]  ->  3 min walk (208m)
+  10:03-11:03  Diner                                  [outdoor, nightlife, food_and_drink]  ->  29 min walk (2191m)
+  11:32-12:32  Taku Sando                             [food_and_drink, scenic]  ->  22 min walk (1646m)
+  12:54-13:54  Five Stuy Cafe                         [food_and_drink, quick_visit]
 
-  ── Trastevere, Rome ──────────────────────────────────
+  -- Trastevere, Rome ----------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:00–10:30  Cencio la Parolaccia                   [nightlife, food_and_drink]  →  4 min walk (267m)
-  10:34–11:34  Mama! Eat                              [food_and_drink]  →  20 min walk (1468m)
-  11:54–12:54  Terrazza Tevere                        [food_and_drink]  →  20 min walk (1514m)
-  13:14–14:14  Bar Carbonetti                         [food_and_drink, quick_visit]
+  09:00-10:30  Cencio la Parolaccia                   [nightlife, food_and_drink]  ->  4 min walk (267m)
+  10:34-11:34  Mama! Eat                              [food_and_drink]  ->  20 min walk (1468m)
+  11:54-12:54  Terrazza Tevere                        [food_and_drink]  ->  20 min walk (1514m)
+  13:14-14:14  Bar Carbonetti                         [food_and_drink, quick_visit]
 
 ================================================================
-  USER  a678ded5…
+  USER  a678ded5...
 ================================================================
   Party:          friends
   Pace:           relaxed
@@ -83,26 +94,26 @@ Pipeline ready.
   Gets around by: walk, transit
   Max travel:     20-40 between stops
 
-  ── Shibuya, Tokyo ────────────────────────────────────
+  -- Shibuya, Tokyo ------------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:10–09:40  駒場公園                                   [budget_friendly, outdoor, historical, scenic]  →  2 min walk (114m)
-  09:42–10:12  日本近代文学館                                [budget_friendly, cultural, historical, scenic]  →  27 min walk (2041m)
-  10:39–11:39  明治神宮御苑                                 [outdoor, scenic]
+  09:24-10:24  新宿御苑                                   [outdoor]  ->  22 min walk (1633m)
+  10:46-11:46  明治神宮御苑                                 [outdoor]  ->  29 min walk (2146m)
+  12:15-13:15  駒場公園                                   [outdoor]
 
-  ── Bedford Avenue, Williamsburg, Brooklyn ────────────
+  -- Bedford Avenue, Williamsburg, Brooklyn ------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:17–09:47  Bedford Playground                     [budget_friendly, outdoor, scenic]  →  20 min walk (1502m)
-  10:07–10:37  Marsha P. Johnson State Park           [budget_friendly, outdoor, scenic]  →  22 min walk (1615m)
-  10:59–11:29  Monsignor McGolrick Park               [budget_friendly, outdoor, historical, scenic]
+  09:17-09:47  Bedford Playground                     [budget_friendly, outdoor, scenic]  ->  20 min walk (1502m)
+  10:07-10:37  Marsha P. Johnson State Park           [budget_friendly, outdoor, scenic]  ->  22 min walk (1615m)
+  10:59-11:29  Monsignor McGolrick Park               [budget_friendly, outdoor, historical, scenic]
 
-  ── Trastevere, Rome ──────────────────────────────────
+  -- Trastevere, Rome ----------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:25–09:55  Basilica di San Paolo fuori le mura    [budget_friendly, historical, scenic]  →  25 min walk (1862m)
-  10:20–10:50  Polo museale ATAC Porta San Paolo      [budget_friendly, cultural, outdoor]  →  31 min walk (2326m)
-  11:21–11:51  Orto Botanico                          [budget_friendly, outdoor]
+  09:07-10:07  Villa Farnesina                        [scenic]  ->  5 min walk (399m)
+  10:12-11:12  Orto Botanico                          [outdoor]  ->  24 min walk (1802m)
+  11:36-12:36  Roseto di Roma Capitale                [outdoor]
 
 ================================================================
-  USER  fa42710a…
+  USER  fa42710a...
 ================================================================
   Party:          couple
   Pace:           balanced
@@ -112,24 +123,24 @@ Pipeline ready.
   Gets around by: walk, transit
   Max travel:     20-40 between stops
 
-  ── Shibuya, Tokyo ────────────────────────────────────
+  -- Shibuya, Tokyo ------------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:30–11:00  日本近代文学館                                [cultural]  →  24 min walk (1836m)
-  11:24–12:54  スターバックス                                [nightlife, food_and_drink, pet_friendly, quick_visit]  →  26 min walk (1948m)
-  13:20–14:50  山種美術館                                  [cultural]  →  17 min walk (1266m)
-  15:07–16:07  double 4                               [food_and_drink]
+  09:30-11:00  日本近代文学館                                [cultural]  ->  24 min walk (1836m)
+  11:24-12:54  スターバックス                                [nightlife, food_and_drink, pet_friendly, quick_visit]  ->  26 min walk (1948m)
+  13:20-14:50  山種美術館                                  [cultural]  ->  17 min walk (1266m)
+  15:07-16:07  double 4                               [food_and_drink]
 
-  ── Bedford Avenue, Williamsburg, Brooklyn ────────────
+  -- Bedford Avenue, Williamsburg, Brooklyn ------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  09:50–10:50  Pause Cafe                             [outdoor, food_and_drink, historical, scenic, pet_friendly, quick_visit]  →  10 min walk (725m)
-  12:00–13:30  Museum of Reclaimed Urban Space        [cultural, outdoor, scenic]  →  21 min walk (1603m)
-  14:30–15:30  Taku Sando                             [food_and_drink, scenic]  →  30 min walk (2274m)
-  17:00–18:00  Sol Et Soleil                          [outdoor, nightlife, food_and_drink, historical, scenic]
+  09:50-10:50  Pause Cafe                             [outdoor, food_and_drink, historical, scenic, pet_friendly, quick_visit]  ->  10 min walk (725m)
+  12:00-13:30  Museum of Reclaimed Urban Space        [cultural, outdoor, scenic]  ->  21 min walk (1603m)
+  14:30-15:30  Taku Sando                             [food_and_drink, scenic]  ->  30 min walk (2274m)
+  17:00-18:00  Sol Et Soleil                          [outdoor, nightlife, food_and_drink, historical, scenic]
 
-  ── Trastevere, Rome ──────────────────────────────────
+  -- Trastevere, Rome ----------------------------------
   Day 1  2026-05-01  [max 20-40 between stops]
-  10:00–11:30  Museo della Repubblica Romana e della memoria garibaldina [cultural, historical, scenic]  →  14 min walk (1018m)
-  11:44–12:44  Pizzeria ai Marmi                      [outdoor, nightlife, food_and_drink, historical, scenic]  →  19 min walk (1432m)
-  13:03–14:33  Museo della Via Ostiense               [cultural, historical, scenic]  →  16 min walk (1165m)
-  14:49–16:19  Centrale Montemartini                  [cultural, historical, scenic]
+  10:00-11:30  Terme di Caracalla                     [historical, scenic]  ->  14 min walk (1026m)
+  11:44-13:14  Polo museale ATAC Porta San Paolo      [cultural]  ->  13 min walk (986m)
+  13:27-14:27  Terrazza Tevere                        [food_and_drink]  ->  26 min walk (1940m)
+  14:53-16:23  Basilica di San Paolo fuori le mura    [historical, scenic]
 

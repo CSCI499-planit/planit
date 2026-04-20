@@ -7,16 +7,17 @@ Users chosen to be as different as possible:
   a678ded5  friends   relaxed   outdoor+scenic    vegetarian   Trastevere, Rome
   fa42710a (Ahmed)  couple    balanced   cultural+food     mediterranean, east asian, american   walk+transit  max 20-40 min travel between stops
 
-Output saved to artifacts/presentation_itineraries.txt
+Calls the live ML service API rather than the pipeline directly.
+
 """
 
 from __future__ import annotations
-from supabase import create_client
-from ml.pipeline import MLPipeline, PipelineConfig
-from ml.utilities.geoapify import fetch_places_for_location
 
 import os
 import sys
+
+import httpx
+from supabase import create_client
 
 os.environ.setdefault(
     "SUPABASE_URL", "https://rcrbaorbyhnsilcbkptq.supabase.co")
@@ -24,18 +25,19 @@ os.environ.setdefault(
     "SUPABASE_KEY",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjcmJhb3JieWhuc2lsY2JrcHRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1Mzg5MSwiZXhwIjoyMDkxNjI5ODkxfQ.Gq_P5S3DQfdIIxPn5wsLsH_KGwGWLULOz0IrGge7Uek",
 )
-os.environ.setdefault("GEOAPIFY_KEY", "a66b4771072b4953ab9b592125471430")
 
-
-ARTIFACT = "artifacts/user_profiler.joblib"
+ML_SERVICE_URL = os.getenv(
+    "ML_SERVICE_URL", "https://planit-3q0m.onrender.com")
 RADIUS_M = 2500
 LIMIT = 40
 START_DATE = "2026-05-01"
 
-# (user_id prefix, location)
 DEMO_USERS = ["f6c8cf87", "dc51cbb4", "a678ded5", "fa42710a"]
-DEMO_LOCATIONS = ["Shibuya, Tokyo",
-                  "Bedford Avenue, Williamsburg, Brooklyn", "Trastevere, Rome"]
+DEMO_LOCATIONS = [
+    "Shibuya, Tokyo",
+    "Bedford Avenue, Williamsburg, Brooklyn",
+    "Trastevere, Rome",
+]
 
 
 def _load_users() -> dict[str, dict]:
@@ -85,70 +87,108 @@ def _user_summary(u: dict) -> str:
     )
 
 
+def _fetch_places(client: httpx.Client, location: str) -> list[dict]:
+    resp = client.get(
+        f"{ML_SERVICE_URL}/places/search",
+        params={"location": location, "radius_m": RADIUS_M, "limit": LIMIT},
+        timeout=60.0,
+    )
+    resp.raise_for_status()
+    return resp.json()["places"]
+
+
+def _fetch_itinerary(client: httpx.Client, user: dict, places: list[dict]) -> list[dict]:
+    payload = {
+        "preference": user,
+        "places":     places,
+        "trip_days":  1,
+        "start_date": START_DATE,
+    }
+    resp = client.post(
+        f"{ML_SERVICE_URL}/itinerary",
+        json=payload,
+        timeout=60.0,
+    )
+    if resp.status_code == 404:
+        return []
+    resp.raise_for_status()
+    return resp.json()["itinerary"]
+
+
 def run(out) -> None:
     def p(*args, **kwargs):
         print(*args, **kwargs)
         print(*args, **kwargs, file=out)
 
-    p("Loading users from Supabase …")
+    p(f"ML service: {ML_SERVICE_URL}")
+    p("Loading users from Supabase ...")
     all_users = _load_users()
+    p(f"Loaded {len(all_users)} users.\n")
 
-    p(f"Loading pipeline from {ARTIFACT} …")
-    pipeline = MLPipeline.load(PipelineConfig(profiler_path=ARTIFACT))
-    pipeline.train_stage2(visits=[], preferences=list(all_users.values()))
-    p("Pipeline ready.\n")
+    with httpx.Client() as client:
+        # health check
+        try:
+            health = client.get(f"{ML_SERVICE_URL}/health", timeout=10.0)
+            p(f"Service health: {health.json()}\n")
+        except Exception as e:
+            p(f"[!] Could not reach ML service at {ML_SERVICE_URL}: {e}")
+            p("    Set ML_SERVICE_URL env var to point at the correct host.")
+            sys.exit(1)
 
-    for uid_prefix in DEMO_USERS:
-        user = next((u for uid, u in all_users.items()
-                    if uid.startswith(uid_prefix)), None)
-        if user is None:
-            p(f"[!] User {uid_prefix} not found — skipping.")
-            continue
-
-        p("=" * 64)
-        p(f"  USER  {uid_prefix}…")
-        p("=" * 64)
-        p(_user_summary(user))
-        p()
-
+        # fetch places once per location (shared across users)
+        location_places: dict[str, list[dict]] = {}
         for location in DEMO_LOCATIONS:
-            p(f"  ── {location} {'─' * (50 - len(location))}")
-
+            p(f"Fetching places for {location!r} ...")
             try:
-                places = fetch_places_for_location(
-                    location, radius_m=RADIUS_M, limit=LIMIT)
+                location_places[location] = _fetch_places(client, location)
+                p(f"  {len(location_places[location])} places\n")
             except Exception as e:
-                p(f"  Could not fetch places: {e}\n")
+                p(f"  Failed: {e}\n")
+                location_places[location] = []
+
+        for uid_prefix in DEMO_USERS:
+            user = next((u for uid, u in all_users.items()
+                        if uid.startswith(uid_prefix)), None)
+            if user is None:
+                p(f"[!] User {uid_prefix} not found — skipping.")
                 continue
 
-            tagged = pipeline.run_stage1(places)
-            embedding = pipeline.run_stage2(user)
-            ranked = pipeline.run_stage3(
-                user_embedding=embedding,
-                tagged_places=tagged,
-                trip_context=user,
-                log_to_db=False,
-            )
-
-            if not ranked:
-                p("  (no results after filters)\n")
-                continue
-
-            trip_context = {**user, "trip_days": 1, "start_date": START_DATE}
-            itinerary = pipeline.run_stage4(ranked, trip_context)
-
-            max_t = user.get("max_travel_minutes", "> 40")
-            for day in itinerary:
-                p(f"  Day {day['day']}  {day.get('date', '')}  [max {max_t} between stops]")
-                for stop in day["stops"]:
-                    pl = stop["place"]
-                    tags = ", ".join(pl.get("tags") or [])
-                    travel = stop.get("travel_to_next")
-                    leg = (f"  →  {travel['minutes']} min {travel['mode']} "
-                           f"({travel['distance_m']}m)") if travel else ""
-                    p(f"  {stop['arrival_time']}–{stop['departure_time']}  "
-                      f"{pl.get('name', '?'):<38} [{tags}]{leg}")
+            p("=" * 64)
+            p(f"  USER  {uid_prefix}...")
+            p("=" * 64)
+            p(_user_summary(user))
             p()
+
+            for location in DEMO_LOCATIONS:
+                p(f"  -- {location} {'-' * (50 - len(location))}")
+
+                places = location_places.get(location, [])
+                if not places:
+                    p("  (no places fetched for this location)\n")
+                    continue
+
+                try:
+                    itinerary = _fetch_itinerary(client, user, places)
+                except Exception as e:
+                    p(f"  Itinerary error: {e}\n")
+                    continue
+
+                if not itinerary:
+                    p("  (no results after filters)\n")
+                    continue
+
+                max_t = user.get("max_travel_minutes", "> 40")
+                for day in itinerary:
+                    p(f"  Day {day['day']}  {day.get('date', '')}  [max {max_t} between stops]")
+                    for stop in day["stops"]:
+                        pl = stop["place"]
+                        tags = ", ".join(pl.get("tags") or [])
+                        travel = stop.get("travel_to_next")
+                        leg = (f"  ->  {travel['minutes']} min {travel['mode']} "
+                               f"({travel['distance_m']}m)") if travel else ""
+                        p(f"  {stop['arrival_time']}-{stop['departure_time']}  "
+                          f"{pl.get('name', '?'):<38} [{tags}]{leg}")
+                p()
 
 
 def main() -> None:

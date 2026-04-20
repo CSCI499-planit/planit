@@ -1,6 +1,6 @@
 # Geoapify API calls + response parsing.
 # Everything gets normalised to the shared PlaceRecord schema before
-# entering the ML pipeline — this is the only place Geoapify JSON is touched.
+# entering the ML pipeline this is the only place Geoapify JSON is touched.
 
 from __future__ import annotations
 
@@ -15,7 +15,10 @@ from ml.data.preprocess import PlaceRecord
 
 logger = logging.getLogger(__name__)
 
-GEOAPIFY_KEY = os.getenv("GEOAPIFY_KEY", "")
+
+def _api_key() -> str:
+    return os.getenv("GEOAPIFY_KEY", "")
+
 
 # Geoapify place categories that map well to our tag vocabulary
 FETCH_CATEGORIES = [
@@ -29,10 +32,10 @@ FETCH_CATEGORIES = [
 
 
 def geocode_location(location: str) -> tuple[float, float]:
-    # accepts cities, neighbourhoods, hotel names, landmarks, addresses — anything Geoapify can resolve
+    # accepts cities, neighbourhoods, hotel names, landmarks, addresses
     resp = httpx.get(
         "https://api.geoapify.com/v1/geocode/search",
-        params={"text": location, "limit": 1, "apiKey": GEOAPIFY_KEY},
+        params={"text": location, "limit": 1, "apiKey": _api_key()},
         timeout=10.0,
     )
     resp.raise_for_status()
@@ -49,7 +52,7 @@ def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) 
         f"?categories={','.join(FETCH_CATEGORIES)}"
         f"&filter=circle:{lon},{lat},{radius_m}"
         f"&limit={limit}"
-        f"&apiKey={GEOAPIFY_KEY}"
+        f"&apiKey={_api_key()}"
     )
     resp = httpx.get(url, timeout=15.0)
     resp.raise_for_status()
@@ -60,11 +63,12 @@ def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 
     from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
     lat, lon = geocode_location(location)
     logger.info("Geocoded %r → (%.4f, %.4f)", location, lat, lon)
-    places       = fetch_places(lat, lon, radius_m=radius_m, limit=limit)
+    places = fetch_places(lat, lon, radius_m=radius_m, limit=limit)
     osm_features = fetch_osm_features(lat, lon, radius_m=radius_m)
-    places       = enrich_places_with_osm(places, osm_features)
-    places       = _deduplicate_by_name(places)
-    logger.info("Fetched %d places for %r (after dedup)", len(places), location)
+    places = enrich_places_with_osm(places, osm_features)
+    places = _deduplicate_by_name(places)
+    logger.info("Fetched %d places for %r (after dedup)",
+                len(places), location)
     return places
 
 
@@ -83,7 +87,8 @@ def _deduplicate_by_name(places: list[PlaceRecord]) -> list[PlaceRecord]:
         if not key:
             continue
         if any(
-            SequenceMatcher(None, key, c).ratio() >= _DEDUP_SIMILARITY_THRESHOLD
+            SequenceMatcher(None, key, c).ratio(
+            ) >= _DEDUP_SIMILARITY_THRESHOLD
             for c in canonical
         ):
             continue
@@ -92,11 +97,10 @@ def _deduplicate_by_name(places: list[PlaceRecord]) -> list[PlaceRecord]:
     return out
 
 
-
 def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
     # returns None if the feature is missing a name or coordinates — skip those
     props = feature.get("properties", {})
-    geom  = feature.get("geometry", {})
+    geom = feature.get("geometry", {})
 
     name = props.get("name", "").strip()
     if not name:
@@ -108,7 +112,8 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
 
     lon, lat = coords[0], coords[1]
 
-    categories: list[str] = [c.lower() for c in (props.get("categories") or [])]
+    categories: list[str] = [c.lower()
+                             for c in (props.get("categories") or [])]
 
     # pull useful sub-fields from Geoapify's nested objects into our flat attributes dict
     attrs: dict[str, Any] = {}
