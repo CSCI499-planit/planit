@@ -1,14 +1,13 @@
 """
-Presentation demo — Ahmed's user profile + 3 unlike users, 3 different locations, 1-day itinerary each.
+Presentation demo — 4 users, 3 locations, 1-day itinerary each.
 
-Users chosen to be as different as possible:
-  f6c8cf87  solo      packed    outdoor+cultural  no diet      Tokyo (Shibuya)
-  dc51cbb4  couple    balanced  food+romantic     halal        Williamsburg, Brooklyn
-  a678ded5  friends   relaxed   outdoor+scenic    vegetarian   Trastevere, Rome
-  fa42710a (Ahmed)  couple    balanced   cultural+food     mediterranean, east asian, american   walk+transit  max 20-40 min travel between stops
+  f6c8cf87  solo      packed    outdoor+cultural  no diet          Tokyo (Shibuya)
+  dc51cbb4  couple    balanced  food+romantic     halal            Williamsburg, Brooklyn
+  a678ded5  friends   relaxed   outdoor+scenic    vegetarian       Trastevere, Rome
+  fa42710a  couple    balanced  cultural+food     mediterranean    walk+transit, max 20-40 min
 
-Calls the live ML service API rather than the pipeline directly.
-
+Calls the live ML service API. Requires SUPABASE_URL, SUPABASE_KEY, and optionally
+ML_SERVICE_URL in the environment (or .env at the project root).
 """
 
 from __future__ import annotations
@@ -18,13 +17,6 @@ import sys
 
 import httpx
 from supabase import create_client
-
-os.environ.setdefault(
-    "SUPABASE_URL", "https://rcrbaorbyhnsilcbkptq.supabase.co")
-os.environ.setdefault(
-    "SUPABASE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjcmJhb3JieWhuc2lsY2JrcHRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1Mzg5MSwiZXhwIjoyMDkxNjI5ODkxfQ.Gq_P5S3DQfdIIxPn5wsLsH_KGwGWLULOz0IrGge7Uek",
-)
 
 ML_SERVICE_URL = os.getenv(
     "ML_SERVICE_URL", "https://planit-3q0m.onrender.com")

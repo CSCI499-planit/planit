@@ -1,10 +1,12 @@
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from ml.api.routes.recommend import router as recommend_router
@@ -19,6 +21,11 @@ logging.basicConfig(level=logging.INFO)
 
 ML_PORT = int(os.getenv("ML_PORT", "8001"))
 ML_HOST = os.getenv("ML_HOST", "0.0.0.0")
+
+# retrain fires when this many new interactions have accumulated AND the cooldown has passed
+RETRAIN_THRESHOLD      = int(os.getenv("RETRAIN_THRESHOLD", "10"))
+MIN_RETRAIN_INTERVAL_H = float(os.getenv("MIN_RETRAIN_INTERVAL_HOURS", "1"))
+_WEBHOOK_SECRET        = os.getenv("WEBHOOK_SECRET", "")
 
 
 def _normalize_preference(row: dict) -> dict:
@@ -58,11 +65,59 @@ def _ratings_to_visits(ratings: list[dict]) -> list[dict]:
     return visits
 
 
+def _cooldown_elapsed(last_retrain_at: datetime | None) -> bool:
+    if last_retrain_at is None:
+        return True
+    elapsed_h = (datetime.now(timezone.utc) - last_retrain_at).total_seconds() / 3600
+    return elapsed_h >= MIN_RETRAIN_INTERVAL_H
+
+
+async def _do_retrain() -> None:
+    # background retrain — acquires lock, swaps pipeline, updates timestamp
+    async with app.state.retrain_lock:
+        try:
+            new_pipeline = await asyncio.to_thread(_fetch_and_train, app.state.pipeline)
+            app.state.pipeline        = new_pipeline
+            app.state.last_retrain_at = datetime.now(timezone.utc)
+            logger.info("Background retrain completed.")
+        except Exception as e:
+            logger.error("Background retrain failed: %s", e, exc_info=True)
+
+
+def _fetch_and_train(pipeline: MLPipeline) -> MLPipeline:
+    # pulls latest data from Supabase and retrains stage 2 in-place
+    from ml.models.user_profiler import MIN_SVD_USERS, parse_app_interactions
+    from supabase import create_client
+
+    sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+
+    raw_prefs    = sb.table("preference").select("*").execute().data or []
+    interactions = sb.table("user_interactions").select("*").execute().data or []
+    raw_ratings  = sb.table("rating").select("*").execute().data or []
+
+    prefs           = [_normalize_preference(p) for p in raw_prefs]
+    implicit_visits = parse_app_interactions(interactions) if interactions else []
+    real_visits     = _ratings_to_visits(raw_ratings) + implicit_visits
+
+    n_users = len({v["user_id"] for v in real_visits})
+    if n_users >= MIN_SVD_USERS:
+        logger.info("%d interaction users — retraining CF on live data.", n_users)
+    elif prefs:
+        logger.info("Fewer than %d interaction users — content-only mode.", MIN_SVD_USERS)
+    else:
+        logger.warning("No preference data in Supabase — cold-start mode.")
+
+    if prefs:
+        pipeline.train_stage2(visits=real_visits, preferences=prefs)
+        pipeline.save()
+
+    return pipeline
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from pathlib import Path
     from ml.pipeline import PipelineConfig
-    from ml.models.user_profiler import MIN_SVD_USERS
 
     artifact_path = os.getenv("PROFILER_ARTIFACT", "artifacts/user_profiler.joblib")
 
@@ -74,39 +129,14 @@ async def lifespan(app: FastAPI):
         logger.warning("No pre-trained artifact at %s — starting cold.", artifact_path)
 
     try:
-        from supabase import create_client
-        sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
-
-        raw_prefs    = sb.table("preference").select("*").execute().data or []
-        interactions = sb.table("user_interactions").select("*").execute().data or []
-        raw_ratings  = sb.table("rating").select("*").execute().data or []
-
-        prefs           = [_normalize_preference(p) for p in raw_prefs]
-        implicit_visits = []
-        if interactions:
-            from ml.models.user_profiler import parse_app_interactions
-            implicit_visits = parse_app_interactions(interactions, user_id=None)
-        explicit_visits = _ratings_to_visits(raw_ratings)
-        real_visits     = explicit_visits + implicit_visits
-
-        real_interaction_users = len({v["user_id"] for v in real_visits})
-
-        if real_interaction_users >= MIN_SVD_USERS:
-            logger.info("%d real interaction users — retraining CF on live data.", real_interaction_users)
-            pipeline.train_stage2(visits=real_visits, preferences=prefs)
-        elif prefs:
-            pipeline.train_stage2(visits=real_visits, preferences=prefs)
-            logger.info("Pipeline updated: %d preferences, %d real interactions.", len(prefs), len(real_visits))
-        else:
-            logger.warning("No preference data in Supabase — running in content-only mode.")
-
-        pipeline.save()
-        logger.info("Profiler saved to %s", artifact_path)
-
+        pipeline = await asyncio.to_thread(_fetch_and_train, pipeline)
     except Exception as e:
-        logger.warning("Startup training failed (%s) — pipeline will use cold-start mode.", e, exc_info=True)
+        logger.warning("Startup training failed (%s) — using loaded artifact.", e, exc_info=True)
 
-    app.state.pipeline = pipeline
+    app.state.pipeline             = pipeline
+    app.state.retrain_lock         = asyncio.Lock()
+    app.state.pending_interactions = 0
+    app.state.last_retrain_at      = datetime.now(timezone.utc)
     logger.info("ML pipeline ready.")
     yield
 
@@ -135,6 +165,47 @@ app.include_router(places_router)
 def health():
     pipeline_ready = hasattr(app.state, "pipeline") and app.state.pipeline is not None
     return {"status": "ok", "pipeline_loaded": pipeline_ready}
+
+
+@app.post("/webhook/interactions")
+async def webhook_interactions(request: Request, background_tasks: BackgroundTasks):
+    # called by Supabase database webhook on every user_interactions INSERT
+    if _WEBHOOK_SECRET:
+        auth = request.headers.get("authorization", "")
+        if auth != f"Bearer {_WEBHOOK_SECRET}":
+            raise HTTPException(status_code=401, detail="Invalid webhook secret.")
+
+    app.state.pending_interactions += 1
+    pending = app.state.pending_interactions
+
+    should_retrain = (
+        pending >= RETRAIN_THRESHOLD
+        and not app.state.retrain_lock.locked()
+        and _cooldown_elapsed(app.state.last_retrain_at)
+    )
+
+    if should_retrain:
+        app.state.pending_interactions = 0
+        background_tasks.add_task(_do_retrain)
+        logger.info("Retrain scheduled after %d new interactions.", pending)
+
+    return {"status": "ok", "pending": app.state.pending_interactions, "retrain_scheduled": should_retrain}
+
+
+@app.post("/admin/retrain")
+async def retrain():
+    # manual hot-swap — lock prevents overlapping retrain jobs
+    if app.state.retrain_lock.locked():
+        raise HTTPException(status_code=409, detail="Retrain already in progress.")
+    async with app.state.retrain_lock:
+        try:
+            new_pipeline = await asyncio.to_thread(_fetch_and_train, app.state.pipeline)
+            app.state.pipeline        = new_pipeline
+            app.state.last_retrain_at = datetime.now(timezone.utc)
+            return {"status": "ok", "detail": "Pipeline retrained and swapped."}
+        except Exception as e:
+            logger.error("Retrain failed: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Retrain failed: {e}")
 
 
 if __name__ == "__main__":

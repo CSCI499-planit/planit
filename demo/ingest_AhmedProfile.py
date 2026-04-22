@@ -1,6 +1,8 @@
 """
-Ahmed's profile ingestion script. 
-Used to ingest a user into supabase, google takeout data, and interactions.
+Ingest Ahmed's Google Takeout data into Supabase (one-time setup script).
+Requires SUPABASE_URL, SUPABASE_KEY, and GEOAPIFY_KEY in the environment (or .env).
+
+Usage: python demo/ingest_AhmedProfile.py --takeout-dir /path/to/takeout [--dry-run]
 """
 
 from __future__ import annotations
@@ -11,13 +13,6 @@ import os
 import sys
 import uuid
 from pathlib import Path
-
-os.environ.setdefault("SUPABASE_URL", "https://rcrbaorbyhnsilcbkptq.supabase.co")
-os.environ.setdefault(
-    "SUPABASE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJjcmJhb3JieWhuc2lsY2JrcHRxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjA1Mzg5MSwiZXhwIjoyMDkxNjI5ODkxfQ.Gq_P5S3DQfdIIxPn5wsLsH_KGwGWLULOz0IrGge7Uek",
-)
-os.environ.setdefault("GEOAPIFY_KEY", "a66b4771072b4953ab9b592125471430")
 
 from ml.models.user_profiler import (
     parse_google_takeout,

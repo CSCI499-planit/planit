@@ -14,9 +14,3 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (norm_a * norm_b))
 
 
-def batch_cosine_similarity(query: np.ndarray, matrix: np.ndarray) -> np.ndarray:
-    # query: (d,)  matrix: (n, d)  →  returns (n,) similarity scores
-    # normalise both sides before the dot product to keep scores in [-1, 1]
-    query_norm  = query  / (np.linalg.norm(query)  + 1e-9)
-    matrix_norm = matrix / (np.linalg.norm(matrix, axis=1, keepdims=True) + 1e-9)
-    return matrix_norm @ query_norm

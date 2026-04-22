@@ -15,3 +15,13 @@ data/review*
 
 # personal takeout data
 data/AhmedTakeout/
+
+# generated artifacts and evaluation outputs
+artifacts/*.md
+artifacts/*.csv
+artifacts/*.txt
+artifacts/*.png
+ml/eval_*.py
+
+# demo script outputs
+demo/artifacts/

@@ -308,6 +308,21 @@ class RouteOptimizer:
         ranked_places: list[PlaceRecord],
         trip_context:  dict,
     ) -> list[dict]:
+        # Option A — deduplicate by place_id before anything else
+        seen: set[str] = set()
+        deduped: list[PlaceRecord] = []
+        for p in ranked_places:
+            pid = p.get("place_id", "")
+            if not pid or pid not in seen:
+                if pid:
+                    seen.add(pid)
+                deduped.append(p)
+        ranked_places = deduped
+
+        # Option B — per-day routing when revisits are allowed
+        if trip_context.get("allow_revisits") and int(trip_context.get("trip_days", 1)) > 1:
+            return self._optimize_with_revisits(ranked_places, trip_context)
+
         pace = trip_context.get("itinerary_pace", "balanced")
         max_per_day = PACE_TO_MAX_PLACES.get(pace, 4)
         modes = trip_context.get("travel_mode") or ["transit"]
@@ -457,5 +472,45 @@ class RouteOptimizer:
             days_out.append(
                 _build_day(ordered, vehicle, mode, start_date, arrival_times)
             )
+
+        return days_out
+
+    def _optimize_with_revisits(
+        self,
+        ranked_places: list[PlaceRecord],
+        trip_context:  dict,
+    ) -> list[dict]:
+        # per-day greedy routing — food_and_drink places can repeat across days,
+        # all other categories are locked after their first scheduled appearance
+        pace = trip_context.get("itinerary_pace", "balanced")
+        max_per_day = PACE_TO_MAX_PLACES.get(pace, 4)
+        modes = trip_context.get("travel_mode") or ["transit"]
+        mode = modes[0] if isinstance(modes, list) else modes
+        trip_days = int(trip_context.get("trip_days", 1))
+        start_date = trip_context.get("start_date")
+        max_travel_min = _parse_max_travel_minutes(
+            trip_context.get("max_travel_minutes", "> 40"))
+
+        seen_non_food: set[str] = set()
+        days_out: list[dict] = []
+
+        for day_idx in range(trip_days):
+            day_pool = [
+                p for p in ranked_places
+                if p.get("place_id") not in seen_non_food
+            ]
+            day_candidates = _ensure_food_stop(day_pool, max_per_day, 1)
+            if not day_candidates:
+                break
+
+            for p in day_candidates:
+                if "food_and_drink" not in (p.get("tags") or []):
+                    pid = p.get("place_id", "")
+                    if pid:
+                        seen_non_food.add(pid)
+
+            ordered = _nearest_neighbor_order(
+                day_candidates, mode=mode, max_travel_min=max_travel_min)
+            days_out.append(_build_day(ordered, day_idx, mode, start_date))
 
         return days_out

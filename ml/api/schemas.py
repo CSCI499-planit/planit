@@ -22,6 +22,7 @@ class UserPreferenceSchema(BaseModel):
     travel_mode:        list[str] = ["transit"]
     max_travel_minutes: str = "20-40"
     itinerary_pace:     str = "balanced"    # "packed" | "balanced" | "relaxed"
+    allow_revisits:     bool = False
 
 
 class UserVisitSchema(BaseModel):

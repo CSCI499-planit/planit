@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Request
+import numpy as np
+from fastapi import APIRouter, HTTPException, Request
 
 from ml.api.schemas import (
     EmbedRequest, EmbedResponse,
@@ -24,11 +25,13 @@ def embed_user(req: EmbedRequest, request: Request):
 
 @router.post("/profile/similar", response_model=SimilarUsersResponse)
 def similar_users(req: SimilarUsersRequest, request: Request):
-    import numpy as np
     pipeline  = request.app.state.pipeline
     embedding = np.array(req.embedding, dtype=np.float32)
 
-    similar = pipeline.find_similar_users(embedding, top_k=req.top_k)
+    try:
+        similar = pipeline.find_similar_users(embedding, top_k=req.top_k)
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="Profiler not fitted yet — try again after retrain.")
 
     return SimilarUsersResponse(
         users=[{"user_id": uid, "similarity": round(sim, 4)} for uid, sim in similar]

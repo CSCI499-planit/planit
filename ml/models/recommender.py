@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ml.models.place_classifier import PLACE_TAGS
-from ml.models.user_profiler import EMBEDDING_DIM
 from ml.utilities.embeddings import cosine_similarity
 
 if TYPE_CHECKING:
@@ -33,10 +32,21 @@ _DIETARY_TAG_FILTER: dict[str, str] = {
     "vegan":      "vegetarian",
 }
 
+# party-type → relevant tags; score is proportional (matching tags / total affinity tags)
+# solo/friends/mixed were previously hardcoded to 0 — this restores the full 10% weight
+_PARTY_TAG_AFFINITIES: dict[str, list[str]] = {
+    "solo":    ["quick_visit", "cultural", "historical", "scenic"],
+    "couple":  ["romantic", "upscale", "scenic", "food_and_drink"],
+    "friends": ["nightlife", "adventurous", "food_and_drink", "outdoor"],
+    "family":  ["family_friendly", "outdoor", "budget_friendly", "food_and_drink"],
+    "mixed":   ["outdoor", "food_and_drink", "cultural"],
+}
+
 
 def _place_embedding(place: PlaceRecord) -> np.ndarray:
+    # _N_TAGS-dim only — caller must slice user_embedding[:_N_TAGS] to align
     place_tags = set(place.get("tags") or [])
-    vec = np.zeros(EMBEDDING_DIM, dtype=np.float32)
+    vec = np.zeros(_N_TAGS, dtype=np.float32)
     for i, tag in enumerate(PLACE_TAGS):
         if tag in place_tags:
             vec[i] = 1.0
@@ -80,7 +90,8 @@ class HybridRecommender:
 
         place_emb = _place_embedding(place)
 
-        cf_score = max(0.0, cosine_similarity(user_embedding, place_emb))
+        # slice user embedding to tag subspace so both vectors are _N_TAGS-dim
+        cf_score = max(0.0, cosine_similarity(user_embedding[:_N_TAGS], place_emb))
 
         preferred = preference.get("preferred_tags") or []
         tag_score = len(set(preferred) & place_tags) / max(len(preferred), 1)
@@ -108,13 +119,10 @@ class HybridRecommender:
                 if any(c.lower() in place_cuisines for c in cuisines):
                     cuisine_bonus = 1.0
 
-        party_type = preference.get("party_type", "")
-        if party_type == "family" and "family_friendly" in place_tags:
-            party_match = 1.0
-        elif party_type == "couple" and "romantic" in place_tags:
-            party_match = 1.0
-        else:
-            party_match = 0.0
+        party_type    = preference.get("party_type", "")
+        affinity_tags = set(_PARTY_TAG_AFFINITIES.get(party_type, []))
+        party_match   = (len(affinity_tags & place_tags) / len(affinity_tags)
+                         if affinity_tags else 0.0)
 
         score = min(
             0.30 * cf_score

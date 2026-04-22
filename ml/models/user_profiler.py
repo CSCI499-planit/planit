@@ -46,6 +46,14 @@ ALL_USE_CASES: list[str] = ["local", "daytrip", "travel", "mixed"]
 # content-only. CF weight ramps up continuously from zero above this threshold.
 MIN_SVD_USERS: int = 20
 
+# O(1) lookup dicts — replaces list.index() calls in _encode_preferences
+_TAG_IDX:    dict[str, int] = {t: i for i, t in enumerate(ALL_TAGS)}
+_CUISINE_IDX: dict[str, int] = {c: i for i, c in enumerate(ALL_CUISINES)}
+_DIETARY_IDX: dict[str, int] = {d: i for i, d in enumerate(ALL_DIETARY)}
+_TRAVEL_IDX:  dict[str, int] = {m: i for i, m in enumerate(ALL_TRAVEL_MODES)}
+_PARTY_IDX:   dict[str, int] = {p: i for i, p in enumerate(ALL_PART_TYPES)}
+_USE_IDX:     dict[str, int] = {u: i for i, u in enumerate(ALL_USE_CASES)}
+
 # content vector layout: 15 + 9 + 4 + 5 + 4 + 7 + 4 scalars = 48 dims total
 _CONTENT_DIM: int = (
     len(ALL_TAGS)           # 15
@@ -394,6 +402,7 @@ class UserProfiler:
     _user_ids:        list[str]               = field(default_factory=list, repr=False, init=False)
     _tag_index:       dict[str, int]          = field(default_factory=dict, repr=False, init=False)
     _n_trained_users: int                     = field(default=0,     repr=False, init=False)
+    _cf_w:            float                   = field(default=0.0,   repr=False, init=False)
     _is_fitted:       bool                    = field(default=False, repr=False, init=False)
 
     def fit(
@@ -441,6 +450,7 @@ class UserProfiler:
         self._user_ids        = all_user_ids
         self._tag_index       = tag_index
         self._n_trained_users = n_interaction_users  # CF count, not total
+        self._cf_w            = self._cf_weight(n_interaction_users)
 
         # content component — encode each user's survey
         content_raw = np.vstack([self._encode_preferences(pref_map.get(uid)) for uid in all_user_ids])
@@ -490,9 +500,8 @@ class UserProfiler:
             return content_emb
         cf_emb /= cf_norm
 
-        # frozen at last fit() — CF weight updates on retrain, not live
-        cf_w     = self._cf_weight(self._n_trained_users)
-        combined = cf_w * cf_emb + (1.0 - cf_w) * content_emb
+        # frozen at last fit() — use cached weight, not recomputed
+        combined = self._cf_w * cf_emb + (1.0 - self._cf_w) * content_emb
         combined /= np.linalg.norm(combined) + 1e-9
         return combined
 
@@ -587,33 +596,33 @@ class UserProfiler:
         offset = 0
 
         for tag in (pref.get("preferred_tags") or []):
-            if tag in ALL_TAGS:
-                vec[offset + ALL_TAGS.index(tag)] = 1.0
+            if tag in _TAG_IDX:
+                vec[offset + _TAG_IDX[tag]] = 1.0
         offset += len(ALL_TAGS)
 
         for c in (pref.get("cuisine_preferences") or []):
-            if c in ALL_CUISINES:
-                vec[offset + ALL_CUISINES.index(c)] = 1.0
+            if c in _CUISINE_IDX:
+                vec[offset + _CUISINE_IDX[c]] = 1.0
         offset += len(ALL_CUISINES)
 
         for m in (pref.get("travel_mode") or []):
-            if m in ALL_TRAVEL_MODES:
-                vec[offset + ALL_TRAVEL_MODES.index(m)] = 1.0
+            if m in _TRAVEL_IDX:
+                vec[offset + _TRAVEL_IDX[m]] = 1.0
         offset += len(ALL_TRAVEL_MODES)
 
         pt = pref.get("party_type", "")
-        if pt in ALL_PART_TYPES:
-            vec[offset + ALL_PART_TYPES.index(pt)] = 1.0
+        if pt in _PARTY_IDX:
+            vec[offset + _PARTY_IDX[pt]] = 1.0
         offset += len(ALL_PART_TYPES)
 
         uc = pref.get("use_case", "")
-        if uc in ALL_USE_CASES:
-            vec[offset + ALL_USE_CASES.index(uc)] = 1.0
+        if uc in _USE_IDX:
+            vec[offset + _USE_IDX[uc]] = 1.0
         offset += len(ALL_USE_CASES)
 
         for d in (pref.get("dietary_restrictions") or []):
-            if d in ALL_DIETARY:
-                vec[offset + ALL_DIETARY.index(d)] = 1.0
+            if d in _DIETARY_IDX:
+                vec[offset + _DIETARY_IDX[d]] = 1.0
         offset += len(ALL_DIETARY)
 
         # normalise scalars to [0, 1] so they're on the same scale as the one-hots

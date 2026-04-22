@@ -2,11 +2,8 @@ from __future__ import annotations
 
 import ast
 import logging
-import math
 import re
 from typing import Any
-
-import numpy as np
 
 from ml.data.preprocess import PlaceRecord
 
@@ -97,86 +94,6 @@ PLACE_TAGS: list[str] = [
     "quick_visit",      # typically under 1 hour
 ]
 
-TAG_INDEX: dict[str, int] = {tag: i for i, tag in enumerate(PLACE_TAGS)}
-
-
-
-class PlaceFeatureExtractor:
-    FEATURE_NAMES: list[str] = [
-        "cat_food_drink", "cat_outdoor", "cat_cultural", "cat_nightlife",
-        "cat_shopping", "cat_wellness", "cat_tourism", "cat_sport", "cat_nature",
-        "price_level", "rating", "review_count_log",
-        "attr_kids", "attr_dogs", "attr_outdoor_seating",
-        "attr_romantic", "attr_groups", "attr_late_night", "attr_alcohol",
-        "hours_late", "hours_early", "hours_weekend", "hours_always",
-    ]
-
-    _CAT_GROUPS: dict[str, list[str]] = {
-        "cat_food_drink": ["catering", "restaurants", "food", "coffee"],
-        "cat_outdoor":    ["leisure", "natural", "beaches", "parks", "hiking"],
-        "cat_cultural":   ["entertainment.museum", "entertainment.art", "entertainment.theatre",
-                           "entertainment.cinema", "tourism.museum", "museums",
-                           "arts & entertainment"],
-        "cat_nightlife":  ["nightlife", "catering.bar", "catering.pub", "catering.nightclub", "bars"],
-        "cat_shopping":   ["commercial", "shopping"],
-        "cat_wellness":   ["sport.fitness", "healthcare", "spas", "fitness"],
-        "cat_tourism":    ["tourism.attraction", "tourism.sights", "tours", "landmarks"],
-        "cat_sport":      ["sport.", "active life", "hiking", "cycling", "climbing"],
-        "cat_nature":     ["natural.", "beaches", "parks", "hiking", "forest"],
-    }
-
-    def extract(self, place: PlaceRecord) -> np.ndarray:
-        categories = [c.lower() for c in (place.get("categories") or [])]
-        attrs      = _parse_place_attributes(place.get("attributes"))
-        hours_feat = _parse_opening_hours_features(place.get("hours"))
-
-        vec: list[float] = []
-
-        # category flags — 1 if any category matches any pattern in the group
-        for patterns in self._CAT_GROUPS.values():
-            flag = any(any(pat in cat for cat in categories) for pat in patterns)
-            vec.append(float(flag))
-
-        # price (0 = unknown), rating (0 = unknown), log review count
-        price = place.get("price_level") or _parse_price_level(place.get("attributes"))
-        vec.append(float(price) if price is not None else 0.0)
-        rating = place.get("rating")
-        vec.append(float(rating) if rating is not None else 0.0)
-        rc = place.get("review_count")
-        vec.append(math.log1p(rc) if rc is not None else 0.0)
-
-        def _bool(key: str) -> float:
-            val = attrs.get(key)
-            return 1.0 if val is not None and str(val).lower() in ("true", "1", "yes") else 0.0
-
-        vec.append(_bool("GoodForKids"))
-        vec.append(_bool("DogsAllowed"))
-        vec.append(_bool("OutdoorSeating"))
-        vec.append(_bool("Romantic"))
-        vec.append(_bool("RestaurantsGoodForGroups"))
-        vec.append(_bool("GoodForMeal.latenight"))
-
-        # alcohol: 0 = none, 0.5 = beer/wine only, 1.0 = full bar
-        alcohol = str(attrs.get("Alcohol", "")).lower()
-        if "full_bar" in alcohol:
-            vec.append(1.0)
-        elif "beer" in alcohol or "wine" in alcohol:
-            vec.append(0.5)
-        else:
-            vec.append(0.0)
-
-        vec.append(float(hours_feat["opens_late"]))
-        vec.append(float(hours_feat["opens_early"]))
-        vec.append(float(hours_feat["open_weekend"]))
-        vec.append(float(hours_feat["is_always_open"]))
-
-        return np.array(vec, dtype=np.float32)
-
-    def extract_batch(self, places: list[PlaceRecord]) -> np.ndarray:
-        return np.stack([self.extract(p) for p in places])
-
-    def get_feature_names(self) -> list[str]:
-        return self.FEATURE_NAMES
 
 
 
@@ -256,7 +173,8 @@ def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
 
     if _bool_attr("Romantic"):
         labels["romantic"] = 1
-    if (_has_cat("leisure.garden", "catering.restaurant") or _bool_attr("OSMGarden")) \
+    # gardens with high price/rating are inherently romantic — restaurants are not
+    if (_has_cat("leisure.garden") or _bool_attr("OSMGarden")) \
             and price and price >= 3 and rating >= 4.0:
         labels["romantic"] = 1
 

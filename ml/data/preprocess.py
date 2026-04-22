@@ -58,6 +58,11 @@ class UserPreference(TypedDict, total=False):
     max_travel_minutes:   str          # "< 10" | "10-20" | "20-40" | "> 40"
     itinerary_pace:       str          # "packed" (6/day) | "balanced" (4) | "relaxed" (2)
 
+    # Section 6 — Revisit behaviour
+    # False (default): each place appears at most once across all days
+    # True: food_and_drink places can repeat across days; landmarks/cultural blocked after first visit
+    allow_revisits:       bool
+
 
 class UserVisit(TypedDict, total=False):
     user_id:     str
