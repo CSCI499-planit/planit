@@ -11,6 +11,7 @@ from server.routes.preferences import router as preference_route
 from server.routes.likes import router as rating_route
 from server.routes.places import router as place_route
 from server.routes.recommend import router as recommend_route
+from server.routes.interactions import router as interaction_route
 
 load_dotenv()
 
@@ -37,6 +38,7 @@ app.include_router(preference_route)
 app.include_router(rating_route)
 app.include_router(place_route)
 app.include_router(recommend_route)
+app.include_router(interaction_route)
 
 if __name__ == "__main__":
     uvicorn.run(app, host=API_HOST, port=int(API_PORT))

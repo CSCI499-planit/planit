@@ -119,7 +119,7 @@ def _osm_tags_to_attrs(tags: dict[str, str]) -> dict[str, Any]:
 def enrich_places_with_osm(
     places:       list[PlaceRecord],
     osm_features: list[dict],
-    max_dist_m:   float = 80.0,
+    max_dist_m:   float = 150.0,
 ) -> list[PlaceRecord]:
     # build flat list of (lat, lon, attrs)
     osm_points: list[tuple[float, float, dict]] = []

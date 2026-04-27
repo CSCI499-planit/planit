@@ -28,6 +28,40 @@ MIN_RETRAIN_INTERVAL_H = float(os.getenv("MIN_RETRAIN_INTERVAL_HOURS", "1"))
 _WEBHOOK_SECRET        = os.getenv("WEBHOOK_SECRET", "")
 
 
+_STORAGE_BUCKET   = os.getenv("ARTIFACT_BUCKET", "ml-artifacts")
+_STORAGE_ARTIFACT = "user_profiler.joblib"
+
+
+def _download_artifact(local_path: str) -> bool:
+    try:
+        from supabase import create_client
+        sb   = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+        data = sb.storage.from_(_STORAGE_BUCKET).download(_STORAGE_ARTIFACT)
+        from pathlib import Path
+        Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(local_path).write_bytes(data)
+        logger.info("Artifact downloaded from Supabase Storage → %s", local_path)
+        return True
+    except Exception as e:
+        logger.warning("Artifact download failed: %s", e)
+        return False
+
+
+def _upload_artifact(local_path: str) -> None:
+    try:
+        from supabase import create_client
+        from pathlib import Path
+        sb   = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+        data = Path(local_path).read_bytes()
+        sb.storage.from_(_STORAGE_BUCKET).upload(
+            _STORAGE_ARTIFACT, data,
+            {"content-type": "application/octet-stream", "upsert": "true"},
+        )
+        logger.info("Artifact uploaded to Supabase Storage.")
+    except Exception as e:
+        logger.warning("Artifact upload failed: %s", e)
+
+
 def _normalize_preference(row: dict) -> dict:
     # DB column cuisines_preferences → ML field cuisine_preferences
     return {
@@ -47,7 +81,29 @@ def _normalize_preference(row: dict) -> dict:
     }
 
 
-def _ratings_to_visits(ratings: list[dict]) -> list[dict]:
+def _build_place_tag_db(rows: list[dict]) -> dict[str, list[str]]:
+    from ml.models.place_classifier import rule_based_labels
+    from ml.utilities.geoapify import normalize_db_place
+
+    tag_db: dict[str, list[str]] = {}
+    for row in rows:
+        place_id = str(row.get("id") or row.get("place_id") or "")
+        if not place_id:
+            continue
+        tags = row.get("tags") or []
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(",") if t.strip()]
+        if not tags:
+            place = normalize_db_place(row) if "lat" in row else row
+            if isinstance(place.get("hours"), dict):
+                place = {**place, "hours": None}
+            tags = [tag for tag, val in rule_based_labels(place).items() if val == 1]
+        if tags:
+            tag_db[place_id] = list(tags)
+    return tag_db
+
+
+def _ratings_to_visits(ratings: list[dict], place_tag_db: dict[str, list[str]]) -> list[dict]:
     visits = []
     for row in ratings:
         user_id  = str(row.get("user_id", ""))
@@ -60,9 +116,66 @@ def _ratings_to_visits(ratings: list[dict]) -> list[dict]:
             "place_id":    place_id,
             "rating":      float(rating),
             "visit_count": 1,
-            "tags":        [],
+            "tags":        place_tag_db.get(place_id, []),
+            "created_at":  row.get("created_at"),
         })
     return visits
+
+
+def _impression_visits(rec_logs: list[dict], positive_keys: set[tuple[str, str]]) -> list[dict]:
+    # shown-but-not-positively-interacted → weak implicit negative (rating 2.0)
+    # only top-5 ranked positions: lower ranks may not have been seen by the user
+    visits = []
+    seen: set[tuple[str, str]] = set()
+    for row in rec_logs:
+        uid = str(row.get("user_id", ""))
+        pid = str(row.get("place_id", ""))
+        if not uid or not pid:
+            continue
+        if row.get("rank_position", 99) > 4:
+            continue
+        key = (uid, pid)
+        if key in positive_keys or key in seen:
+            continue
+        seen.add(key)
+        visits.append({
+            "user_id":     uid,
+            "place_id":    pid,
+            "rating":      2.0,
+            "visit_count": 1,
+            "tags":        [],
+            "created_at":  row.get("created_at"),
+        })
+    return visits
+
+
+def _paginate_table(sb, table: str, page_size: int = 1000) -> list[dict]:
+    # Supabase PostgREST default limit is 1000 rows; page through until exhausted
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        batch = (
+            sb.table(table)
+            .select("*")
+            .range(offset, offset + page_size - 1)
+            .execute()
+            .data or []
+        )
+        rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+    return rows
+
+
+def _count_interactions_since(since: datetime | None) -> int:
+    from supabase import create_client
+    sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+    q = sb.table("user_interactions").select("id", count="exact")  # type: ignore[call-overload]
+    if since:
+        q = q.gte("created_at", since.isoformat())
+    result = q.execute()
+    return result.count if result.count is not None else len(result.data or [])
 
 
 def _cooldown_elapsed(last_retrain_at: datetime | None) -> bool:
@@ -78,6 +191,7 @@ async def _do_retrain() -> None:
         try:
             new_pipeline = await asyncio.to_thread(_fetch_and_train, app.state.pipeline)
             app.state.pipeline        = new_pipeline
+            app.state.place_tag_db    = new_pipeline.user_profiler.place_tag_db
             app.state.last_retrain_at = datetime.now(timezone.utc)
             logger.info("Background retrain completed.")
         except Exception as e:
@@ -91,15 +205,43 @@ def _fetch_and_train(pipeline: MLPipeline) -> MLPipeline:
 
     sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
 
-    raw_prefs    = sb.table("preference").select("*").execute().data or []
-    interactions = sb.table("user_interactions").select("*").execute().data or []
-    raw_ratings  = sb.table("rating").select("*").execute().data or []
+    raw_prefs    = _paginate_table(sb, "preference")
+    interactions = _paginate_table(sb, "user_interactions")
+    raw_ratings  = _paginate_table(sb, "rating")
+    try:
+        raw_places = _paginate_table(sb, "place")
+    except Exception as e:
+        logger.warning("place tag lookup failed: %s", e)
+        raw_places = []
+
+    # Seed from the inference-time cache (populated by run_stage1 on every
+    # recommendation call), then layer in any place-table rows on top.
+    # This is the primary source of truth since the place table is empty —
+    # Geoapify places are fetched per-request and never written to Supabase.
+    place_tag_db = dict(pipeline.place_tag_db)
+    place_tag_db.update(_build_place_tag_db(raw_places))
 
     prefs           = [_normalize_preference(p) for p in raw_prefs]
-    implicit_visits = parse_app_interactions(interactions) if interactions else []
-    real_visits     = _ratings_to_visits(raw_ratings) + implicit_visits
+    implicit_visits = parse_app_interactions(interactions, place_tag_db=place_tag_db) if interactions else []
+    real_visits     = _ratings_to_visits(raw_ratings, place_tag_db) + implicit_visits
+    tagged_visits   = [v for v in real_visits if v.get("tags")]
 
-    n_users = len({v["user_id"] for v in real_visits})
+    try:
+        rec_logs = _paginate_table(sb, "recommendation_logs")
+        positive_keys = {(v["user_id"], v["place_id"]) for v in real_visits if float(v.get("rating") or 0) >= 3.5}
+        impression_negs = _impression_visits(rec_logs, positive_keys)
+        for v in impression_negs:
+            v["tags"] = place_tag_db.get(v["place_id"], [])
+        tagged_visits += [v for v in impression_negs if v.get("tags")]
+        logger.info("Added %d impression-negative visits from recommendation_logs.", len(impression_negs))
+    except Exception as e:
+        logger.warning("recommendation_logs fetch failed: %s", e)
+
+    logger.info("place_tag_db has %d entries after merge.", len(place_tag_db))
+    # Write back the merged cache so it's included in the saved artifact
+    pipeline.place_tag_db = place_tag_db
+
+    n_users = len({v["user_id"] for v in tagged_visits})
     if n_users >= MIN_SVD_USERS:
         logger.info("%d interaction users — retraining CF on live data.", n_users)
     elif prefs:
@@ -108,8 +250,9 @@ def _fetch_and_train(pipeline: MLPipeline) -> MLPipeline:
         logger.warning("No preference data in Supabase — cold-start mode.")
 
     if prefs:
-        pipeline.train_stage2(visits=real_visits, preferences=prefs)
+        pipeline.train_stage2(visits=tagged_visits, preferences=prefs)
         pipeline.save()
+        _upload_artifact(pipeline.config.profiler_path)
 
     return pipeline
 
@@ -121,23 +264,26 @@ async def lifespan(app: FastAPI):
 
     artifact_path = os.getenv("PROFILER_ARTIFACT", "artifacts/user_profiler.joblib")
 
+    if not Path(artifact_path).exists():
+        _download_artifact(artifact_path)
+
     if Path(artifact_path).exists():
         pipeline = MLPipeline.load(PipelineConfig(profiler_path=artifact_path))
         logger.info("Loaded pre-trained profiler from %s", artifact_path)
     else:
         pipeline = MLPipeline()
-        logger.warning("No pre-trained artifact at %s — starting cold.", artifact_path)
+        logger.warning("No artifact available — starting cold.")
 
     try:
         pipeline = await asyncio.to_thread(_fetch_and_train, pipeline)
     except Exception as e:
         logger.warning("Startup training failed (%s) — using loaded artifact.", e, exc_info=True)
 
-    app.state.pipeline             = pipeline
-    app.state.retrain_lock         = asyncio.Lock()
-    app.state.pending_interactions = 0
-    app.state.last_retrain_at      = datetime.now(timezone.utc)
-    logger.info("ML pipeline ready.")
+    app.state.pipeline        = pipeline
+    app.state.place_tag_db    = pipeline.user_profiler.place_tag_db
+    app.state.retrain_lock    = asyncio.Lock()
+    app.state.last_retrain_at = datetime.now(timezone.utc)
+    logger.info("ML pipeline ready. place_tag_db has %d entries.", len(app.state.place_tag_db))
     yield
 
 
@@ -175,21 +321,19 @@ async def webhook_interactions(request: Request, background_tasks: BackgroundTas
         if auth != f"Bearer {_WEBHOOK_SECRET}":
             raise HTTPException(status_code=401, detail="Invalid webhook secret.")
 
-    app.state.pending_interactions += 1
-    pending = app.state.pending_interactions
+    # fast-path: skip DB query when lock is held or cooldown hasn't elapsed
+    if app.state.retrain_lock.locked() or not _cooldown_elapsed(app.state.last_retrain_at):
+        return {"status": "ok", "retrain_scheduled": False}
 
-    should_retrain = (
-        pending >= RETRAIN_THRESHOLD
-        and not app.state.retrain_lock.locked()
-        and _cooldown_elapsed(app.state.last_retrain_at)
-    )
+    # DB-backed count so restarts don't lose accumulated interactions
+    pending = await asyncio.to_thread(_count_interactions_since, app.state.last_retrain_at)
+    should_retrain = pending >= RETRAIN_THRESHOLD
 
     if should_retrain:
-        app.state.pending_interactions = 0
         background_tasks.add_task(_do_retrain)
         logger.info("Retrain scheduled after %d new interactions.", pending)
 
-    return {"status": "ok", "pending": app.state.pending_interactions, "retrain_scheduled": should_retrain}
+    return {"status": "ok", "pending": pending, "retrain_scheduled": should_retrain}
 
 
 @app.post("/admin/retrain")
@@ -201,6 +345,7 @@ async def retrain():
         try:
             new_pipeline = await asyncio.to_thread(_fetch_and_train, app.state.pipeline)
             app.state.pipeline        = new_pipeline
+            app.state.place_tag_db    = new_pipeline.user_profiler.place_tag_db
             app.state.last_retrain_at = datetime.now(timezone.utc)
             return {"status": "ok", "detail": "Pipeline retrained and swapped."}
         except Exception as e:

@@ -49,6 +49,7 @@ _DAY_START_MINUTES: int = 9 * 60    # 9:00 AM in minutes from midnight
 _DAY_END_MINUTES:   int = 22 * 60   # 10:00 PM
 
 _VRP_SOLVER_TIME_LIMIT_SECONDS: int = 10
+_CANDIDATE_BUFFER_PER_DAY: int = 2
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -68,10 +69,20 @@ def _travel_minutes(lat1: float, lon1: float, lat2: float, lon2: float, mode: st
 
 
 def _dwell_minutes(place: PlaceRecord) -> int:
-    for tag in (place.get("tags") or []):
-        if tag in _TAG_DWELL_MINUTES:
-            return _TAG_DWELL_MINUTES[tag]
-    return _DEFAULT_DWELL_MINUTES
+    times = [_TAG_DWELL_MINUTES[t] for t in (place.get("tags") or []) if t in _TAG_DWELL_MINUTES]
+    return max(times) if times else _DEFAULT_DWELL_MINUTES
+
+
+def _filter_open_during_day(
+    places:        list["PlaceRecord"],
+    day_start_min: int = _DAY_START_MINUTES,
+    day_end_min:   int = _DAY_END_MINUTES,
+) -> list["PlaceRecord"]:
+    open_places = [
+        p for p in places
+        if _arrival_window(p, day_start_min, day_end_min) is not None
+    ]
+    return open_places if open_places else places
 
 
 _CATEGORY_DEFAULT_WINDOWS: list[tuple[list[str], tuple[int, int]]] = [
@@ -130,6 +141,19 @@ def _parse_time_window(hours: str | None, place: "PlaceRecord | None" = None) ->
             return (open_min, close_min)
 
     return _category_default_window(place) if place else (_DAY_START_MINUTES, _DAY_END_MINUTES)
+
+
+def _arrival_window(
+    place:         "PlaceRecord",
+    day_start_min: int = _DAY_START_MINUTES,
+    day_end_min:   int = _DAY_END_MINUTES,
+) -> tuple[int, int] | None:
+    tw_open, tw_close = _parse_time_window(place.get("hours"), place)
+    latest = min(tw_close - _dwell_minutes(place), day_end_min)
+    earliest = max(tw_open, day_start_min)
+    if latest < earliest:
+        return None
+    return earliest, latest
 
 
 def _minutes_to_time(minutes: int) -> str:
@@ -232,6 +256,42 @@ def _build_day(
     return {"day": day_idx + 1, "date": date_str, "stops": stops}
 
 
+def _build_greedy_day(
+    places:     list[PlaceRecord],
+    day_idx:    int,
+    mode:       str,
+    start_date: str | None,
+) -> dict | None:
+    scheduled: list[PlaceRecord] = []
+    arrivals:  list[int] = []
+    current = _DAY_START_MINUTES
+    prev: PlaceRecord | None = None
+
+    for place in places:
+        window = _arrival_window(place)
+        if window is None:
+            continue
+        travel = (
+            _travel_minutes(
+                prev["latitude"], prev["longitude"],
+                place["latitude"], place["longitude"],
+                mode,
+            )
+            if prev else 0
+        )
+        arr_min = max(current + travel, window[0])
+        if arr_min > window[1]:
+            continue
+        scheduled.append(place)
+        arrivals.append(arr_min)
+        current = arr_min + _dwell_minutes(place)
+        prev = place
+
+    if not scheduled:
+        return None
+    return _build_day(scheduled, day_idx, mode, start_date, arrivals)
+
+
 def _greedy_fallback(candidates: list[PlaceRecord], trip_context: dict) -> list[dict]:
     pace = trip_context.get("itinerary_pace", "balanced")
     max_per_day = PACE_TO_MAX_PLACES.get(pace, 4)
@@ -241,16 +301,28 @@ def _greedy_fallback(candidates: list[PlaceRecord], trip_context: dict) -> list[
     start_date = trip_context.get("start_date")
     max_travel_min = _parse_max_travel_minutes(
         trip_context.get("max_travel_minutes", "> 40"))
+    hotel_loc = trip_context.get("hotel_location")
+
+    candidates = _filter_open_during_day(candidates)
 
     days_out = []
     for day_idx in range(trip_days):
-        day_places = candidates[day_idx *
-                                max_per_day: (day_idx + 1) * max_per_day]
+        day_places = candidates[day_idx * max_per_day: (day_idx + 1) * max_per_day]
         if not day_places:
             break
+        if hotel_loc:
+            day_places = sorted(
+                day_places,
+                key=lambda p: _haversine_km(
+                    float(hotel_loc["latitude"]), float(hotel_loc["longitude"]),
+                    p.get("latitude", 0.0), p.get("longitude", 0.0),
+                ),
+            )
         ordered = _nearest_neighbor_order(
             day_places, mode=mode, max_travel_min=max_travel_min)
-        days_out.append(_build_day(ordered, day_idx, mode, start_date))
+        day = _build_greedy_day(ordered, day_idx, mode, start_date)
+        if day:
+            days_out.append(day)
     return days_out
 
 
@@ -301,6 +373,26 @@ def _ensure_food_stop(
     return candidates
 
 
+def _candidate_pool(
+    ranked_places: list[PlaceRecord],
+    max_per_day:   int,
+    trip_days:     int,
+) -> list[PlaceRecord]:
+    total_slots = max_per_day * trip_days
+    candidates = _ensure_food_stop(ranked_places, total_slots, trip_days)
+    used_ids = {p.get("place_id") for p in candidates}
+    buffer = _CANDIDATE_BUFFER_PER_DAY * trip_days
+    for p in ranked_places:
+        if len(candidates) >= total_slots + buffer:
+            break
+        pid = p.get("place_id")
+        if pid in used_ids:
+            continue
+        candidates.append(p)
+        used_ids.add(pid)
+    return candidates
+
+
 class RouteOptimizer:
 
     def optimize(
@@ -332,18 +424,23 @@ class RouteOptimizer:
         max_travel_min = _parse_max_travel_minutes(
             trip_context.get("max_travel_minutes", "> 40"))
 
-        candidates = _ensure_food_stop(
-            ranked_places, max_per_day * trip_days, trip_days
-        )
+        candidates = _candidate_pool(ranked_places, max_per_day, trip_days)
+        candidates = [p for p in candidates if _arrival_window(p) is not None]
         if not candidates:
             return []
         if len(candidates) == 1:
-            return [_build_day(candidates, 0, mode, start_date)]
+            day = _build_greedy_day(candidates, 0, mode, start_date)
+            return [day] if day else []
 
-        all_lats = [p.get("latitude", 0.0) for p in candidates]
-        all_lons = [p.get("longitude", 0.0) for p in candidates]
-        depot_lat = sum(all_lats) / len(all_lats)
-        depot_lon = sum(all_lons) / len(all_lons)
+        hotel_loc = trip_context.get("hotel_location")
+        if hotel_loc:
+            depot_lat = float(hotel_loc["latitude"])
+            depot_lon = float(hotel_loc["longitude"])
+        else:
+            all_lats  = [p.get("latitude", 0.0) for p in candidates]
+            all_lons  = [p.get("longitude", 0.0) for p in candidates]
+            depot_lat = sum(all_lats) / len(all_lats)
+            depot_lon = sum(all_lons) / len(all_lons)
 
         locations = [(depot_lat, depot_lon)] + [(p.get("latitude",
                                                        0.0), p.get("longitude", 0.0)) for p in candidates]
@@ -373,7 +470,11 @@ class RouteOptimizer:
 
         time_windows = [(_DAY_START_MINUTES, _DAY_START_MINUTES)]
         for p in candidates:
-            time_windows.append(_parse_time_window(p.get("hours"), p))
+            window = _arrival_window(p)
+            if window is None:
+                logger.warning("Skipping impossible time window for %s", p.get("name"))
+                continue
+            time_windows.append(window)
 
         manager = pywrapcp.RoutingIndexManager(n, trip_days, 0)
         routing = pywrapcp.RoutingModel(manager)
@@ -418,6 +519,12 @@ class RouteOptimizer:
             True,
             "Capacity",
         )
+
+        for node in range(1, n):
+            score = float(candidates[node - 1].get("score") or 0.0)
+            rank_bonus = max(0, len(candidates) - node)
+            penalty = 1_000 + int(score * 10_000) + rank_bonus
+            routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
 
         params = pywrapcp.DefaultRoutingSearchParameters()
         params.first_solution_strategy = (
@@ -511,6 +618,8 @@ class RouteOptimizer:
 
             ordered = _nearest_neighbor_order(
                 day_candidates, mode=mode, max_travel_min=max_travel_min)
-            days_out.append(_build_day(ordered, day_idx, mode, start_date))
+            day = _build_greedy_day(ordered, day_idx, mode, start_date)
+            if day:
+                days_out.append(day)
 
         return days_out

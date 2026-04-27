@@ -22,6 +22,7 @@ dependencies = [
 
     # HTTP
     "requests>=2.31",
+    "httpx>=0.27",
 
     # database
     "supabase>=2.0",

@@ -17,26 +17,31 @@ def _normalize_places(places: list[dict]) -> list[dict]:
 router = APIRouter()
 
 
+def _enrich_visits(visits: list[dict], place_tag_db: dict[str, list[str]]) -> list[dict]:
+    return [
+        {**v, "tags": v.get("tags") or place_tag_db.get(v.get("place_id", ""), [])}
+        for v in visits
+    ]
+
+
 @router.post("/recommend", response_model=RecommendResponse)
 def recommend(req: RecommendRequest, request: Request):
-    pipeline = request.app.state.pipeline
+    pipeline     = request.app.state.pipeline
+    place_tag_db = getattr(request.app.state, "place_tag_db", {})
 
-    # convert Pydantic models back to plain dicts so the pipeline TypedDicts accept them
-    preference   = req.preference.model_dump()
-    places       = _normalize_places([p.model_dump() for p in req.places])
-    visits       = [v.model_dump() for v in req.visits] if req.visits else None
+    preference = req.preference.model_dump()
+    places     = _normalize_places([p.model_dump() for p in req.places])
+    visits     = _enrich_visits([v.model_dump() for v in req.visits], place_tag_db) if req.visits else None
 
-    # stage 1 — tag any places that don't already have tags
-    tagged = pipeline.run_stage1(places)
-
-    # stage 2 — embed the user (content-only if no visit history is provided)
+    tagged    = pipeline.run_stage1(places)
     embedding = pipeline.run_stage2(preference, visits)
-
-    # stage 3 — score and rank the tagged places
-    ranked = pipeline.run_stage3(
+    ranked    = pipeline.run_stage3(
         user_embedding=embedding,
         tagged_places=tagged,
         trip_context=preference,
+        top_k=req.top_k,
+        ensure_itinerary_buffer=False,
+        excluded_ids=set(req.excluded_place_ids),
     )
 
     if not ranked:
@@ -47,13 +52,16 @@ def recommend(req: RecommendRequest, request: Request):
 
 @router.post("/itinerary", response_model=ItineraryResponse)
 def itinerary(req: ItineraryRequest, request: Request):
-    pipeline   = request.app.state.pipeline
+    pipeline     = request.app.state.pipeline
+    place_tag_db = getattr(request.app.state, "place_tag_db", {})
+
     preference = req.preference.model_dump()
-    preference["trip_days"]  = req.trip_days
-    preference["start_date"] = req.start_date
+    preference["trip_days"]      = req.trip_days
+    preference["start_date"]     = req.start_date
+    preference["hotel_location"] = req.hotel_location.model_dump() if req.hotel_location else None
 
     places = _normalize_places([p.model_dump() for p in req.places])
-    visits = [v.model_dump() for v in req.visits] if req.visits else None
+    visits = _enrich_visits([v.model_dump() for v in req.visits], place_tag_db) if req.visits else None
 
     tagged    = pipeline.run_stage1(places)
     embedding = pipeline.run_stage2(preference, visits)
@@ -61,6 +69,8 @@ def itinerary(req: ItineraryRequest, request: Request):
         user_embedding=embedding,
         tagged_places=tagged,
         trip_context=preference,
+        top_k=req.top_k,
+        excluded_ids=set(req.excluded_place_ids),
     )
 
     if not ranked:

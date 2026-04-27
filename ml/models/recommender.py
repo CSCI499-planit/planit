@@ -25,12 +25,8 @@ _POPULARITY_NORM = 25.0  # gentler curve so one viral venue doesn't dominate
 _PRIOR_RATING = 3.5
 _PRIOR_COUNT  = 10
 
-# halal excluded — Geoapify doesn't return certification data, so filtering on it
-# would zero out all food places for halal users
-_DIETARY_TAG_FILTER: dict[str, str] = {
-    "vegetarian": "vegetarian",
-    "vegan":      "vegetarian",
-}
+# only hard-filter diets Geoapify can actually confirm
+_HARD_DIETARY = {"vegetarian", "vegan"}
 
 # party-type → relevant tags; score is proportional (matching tags / total affinity tags)
 # solo/friends/mixed were previously hardcoded to 0 — this restores the full 10% weight
@@ -64,6 +60,35 @@ def _get_cuisine_from_attributes(attrs: dict | None) -> list[str]:
     return [c.lower().strip() for c in str(raw).split(",") if c.strip()]
 
 
+def _get_diet_from_attributes(attrs: dict | None) -> set[str]:
+    if not attrs:
+        return set()
+    raw = attrs.get("diet")
+    if raw is None:
+        return set()
+    if isinstance(raw, dict):
+        return {
+            str(k).lower().strip()
+            for k, v in raw.items()
+            if str(v).lower() in ("true", "1", "yes")
+        }
+    if isinstance(raw, list):
+        return {str(d).lower().strip() for d in raw}
+    return {d.lower().strip() for d in str(raw).split(",") if d.strip()}
+
+
+def _passes_dietary_filter(place: PlaceRecord, dietary: set[str]) -> bool:
+    required = dietary & _HARD_DIETARY
+    if not required:
+        return True
+    diets = _get_diet_from_attributes(place.get("attributes"))
+    if not diets:
+        return True
+    if "vegan" in required:
+        return "vegan" in diets
+    return bool({"vegetarian", "vegan"} & diets)
+
+
 class HybridRecommender:
 
     def _score_place_with_breakdown(
@@ -78,15 +103,15 @@ class HybridRecommender:
         }
         place_tags = set(place.get("tags") or [])
 
-        price = place.get("price_level")
-        if price is not None and price > preference.get("daily_budget_tier", 4):
+        price       = place.get("price_level")
+        budget_tier = preference.get("daily_budget_tier") or 4
+        if price is not None and price > budget_tier:
             return _zero
 
         dietary = set(preference.get("dietary_restrictions") or [])
         if dietary and "food_and_drink" in place_tags:
-            for restriction, required_tag in _DIETARY_TAG_FILTER.items():
-                if restriction in dietary and required_tag not in place_tags:
-                    return _zero
+            if not _passes_dietary_filter(place, dietary):
+                return _zero
 
         place_emb = _place_embedding(place)
 
@@ -96,19 +121,18 @@ class HybridRecommender:
         preferred = preference.get("preferred_tags") or []
         tag_score = len(set(preferred) & place_tags) / max(len(preferred), 1)
 
-        rating = place.get("rating")
+        rating       = place.get("rating")
         review_count = place.get("review_count")
-        pop_weight = preference.get("popularity_weight", 3) / 5.0
+        pop_weight   = (preference.get("popularity_weight") or 3) / 5.0
 
         if rating is not None and review_count is not None:
             rc = float(review_count)
             bayesian = (_PRIOR_COUNT * _PRIOR_RATING + rc *
                         float(rating)) / (_PRIOR_COUNT + rc)
             raw_pop = bayesian * math.log1p(rc)
+            popularity_score = min(raw_pop / _POPULARITY_NORM, 1.0) * pop_weight
         else:
-            raw_pop = _PRIOR_RATING * math.log1p(1)
-
-        popularity_score = min(raw_pop / _POPULARITY_NORM, 1.0) * pop_weight
+            popularity_score = 0.0
 
         cuisine_bonus = 0.0
         if "food_and_drink" in place_tags:
@@ -144,13 +168,17 @@ class HybridRecommender:
 
     def recommend(
         self,
-        user_embedding: np.ndarray,
-        places: list[PlaceRecord],
-        preference: UserPreference,
-        top_k: int = 20,
+        user_embedding:    np.ndarray,
+        places:            list[PlaceRecord],
+        preference:        UserPreference,
+        top_k:             int = 20,
+        excluded_ids:      set[str] | None = None,
     ) -> list[PlaceRecord]:
+        excluded_ids = excluded_ids or set()
         scored: list[tuple[float, PlaceRecord, dict]] = []
         for place in places:
+            if place.get("place_id") in excluded_ids:
+                continue
             bd = self._score_place_with_breakdown(
                 user_embedding, place, preference)
             if bd["score"] > 0.0:
@@ -168,12 +196,15 @@ class HybridRecommender:
 
         return [{
             **place,
-            "score":          round(score, 4),
-            "_cf_score":      round(bd["cf_score"], 4),
-            "_tag_score":     round(bd["tag_score"], 4),
-            "_pop_score":     round(bd["pop_score"], 4),
-            "_cuisine_bonus": round(bd["cuisine_bonus"], 4),
-            "_party_match":   round(bd["party_match"], 4),
+            "score": round(score, 4),
+            "score_breakdown": {
+                "cf_score":      round(bd["cf_score"], 4),
+                "tag_score":     round(bd["tag_score"], 4),
+                "pop_score":     round(bd["pop_score"], 4),
+                "cuisine_bonus": round(bd["cuisine_bonus"], 4),
+                "party_match":   round(bd["party_match"], 4),
+            },
+            "fallback": False,
         } for score, place, bd in ranked]
 
     @staticmethod
@@ -193,7 +224,7 @@ class HybridRecommender:
         ranked = sorted(places, key=_pop_score, reverse=True)
         return [
             {**p, "score": round(min(_pop_score(p) /
-                                 _POPULARITY_NORM, 1.0), 4), "_fallback": True}
+                                 _POPULARITY_NORM, 1.0), 4), "fallback": True}
             for p in ranked[:top_k]
         ]
 

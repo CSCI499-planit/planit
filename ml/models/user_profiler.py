@@ -1,11 +1,11 @@
 # Stage 2 — user preference profiling
-# Blends survey content-encoding with collaborative filtering (TruncatedSVD)
-# into a single 48-dim embedding per user.
+# Keeps tag slots clean, stores CF signal in the remaining embedding dims.
 # CF weight ramps continuously from 0 → 0.8 as the user base grows to 250.
 
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +70,9 @@ assert _CONTENT_DIM == EMBEDDING_DIM, (
     f"Content dim {_CONTENT_DIM} must equal EMBEDDING_DIM {EMBEDDING_DIM}. "
     "Update both together or add a learned projection layer."
 )
+
+_TAG_DIM: int = len(ALL_TAGS)
+_TAIL_DIM: int = EMBEDDING_DIM - _TAG_DIM
 
 # dwell time → implicit rating; short stays are likely pass-bys
 _DURATION_RATING_BREAKPOINTS: list[tuple[int, float]] = [
@@ -341,14 +344,20 @@ def parse_google_saved_places(
 
 
 
+# canonical event → implicit rating mapping; server.controllers.interactions mirrors this
+EVENT_RATINGS: dict[str, float] = {
+    "like":              4.5,
+    "unlike":            1.0,
+    "itinerary_like":    5.0,
+    "itinerary_dislike": 1.0,
+}
+
+
 def parse_app_interactions(
     interactions: list[dict],
     user_id:      str | None = None,
     place_tag_db: dict[str, list[str]] | None = None,
 ) -> list[UserVisit]:
-    # import here to avoid circular dependency: server → ml → server
-    from server.controllers.interactions import EVENT_RATINGS
-
     place_tag_db = place_tag_db or {}
     aggregated: dict[tuple[str, str], dict] = {}
 
@@ -362,12 +371,16 @@ def parse_app_interactions(
 
         key = (row_user, place_id)
         if key not in aggregated:
+            # prefer place_tag_db; fall back to metadata.tags (set by simulation)
+            meta = row.get("metadata") or {}
+            tags = place_tag_db.get(place_id) or meta.get("tags") or []
             aggregated[key] = {
                 "user_id":     row_user,
                 "place_id":    place_id,
-                "tags":        place_tag_db.get(place_id, []),
+                "tags":        tags,
                 "ratings":     [],
                 "visit_count": 0,
+                "created_at":  row.get("created_at"),
             }
         aggregated[key]["ratings"].append(rating)
         aggregated[key]["visit_count"] += 1
@@ -381,6 +394,7 @@ def parse_app_interactions(
             rating=round(avg_rating, 2),
             visit_count=agg["visit_count"],
             tags=agg["tags"],
+            created_at=agg["created_at"],
         ))
 
     logger.info(
@@ -404,6 +418,9 @@ class UserProfiler:
     _n_trained_users: int                     = field(default=0,     repr=False, init=False)
     _cf_w:            float                   = field(default=0.0,   repr=False, init=False)
     _is_fitted:       bool                    = field(default=False, repr=False, init=False)
+    # place_id → tags cache: populated by run_stage1 at inference time and
+    # persisted inside the joblib artifact so it survives restarts.
+    place_tag_db:     dict[str, list[str]]    = field(default_factory=dict, repr=False, init=False)
 
     def fit(
         self,
@@ -423,11 +440,11 @@ class UserProfiler:
         cf_w = self._cf_weight(n_interaction_users)
         logger.info("CF weight=%.2f  content weight=%.2f", cf_w, 1.0 - cf_w)
 
-        if n_interaction_users >= MIN_SVD_USERS:
-            svd_dim   = max(1, min(self.embedding_dim // 2, matrix.shape[1] - 1, n_interaction_users - 1))
+        if n_interaction_users >= MIN_SVD_USERS and matrix.nnz > 0:
+            svd_dim   = max(1, min(_TAIL_DIM, matrix.shape[1] - 1, n_interaction_users - 1))
             self._svd = TruncatedSVD(n_components=svd_dim, random_state=42)
-            cf_raw    = normalize(_pad(self._svd.fit_transform(matrix), self.embedding_dim))
-            # cf embeddings keyed by user_id for later blending
+            cf_raw    = normalize(_pad(self._svd.fit_transform(matrix), _TAIL_DIM))
+            # CF stays out of the tag slots
             cf_lookup = {uid: cf_raw[i] for i, uid in enumerate(interaction_user_ids)}
         else:
             logger.info(
@@ -452,18 +469,18 @@ class UserProfiler:
         self._n_trained_users = n_interaction_users  # CF count, not total
         self._cf_w            = self._cf_weight(n_interaction_users)
 
-        # content component — encode each user's survey
-        content_raw = np.vstack([self._encode_preferences(pref_map.get(uid)) for uid in all_user_ids])
-        content_emb = normalize(_pad(content_raw, self.embedding_dim))
+        tag_lookup = self._build_user_tag_lookup(visits, tag_index)
 
-        # CF component aligned to all_user_ids (zeros for preference-only users)
-        cf_emb = np.vstack([
-            cf_lookup.get(uid, np.zeros(self.embedding_dim, dtype=np.float32))
+        content_raw = [self._encode_preferences(pref_map.get(uid)) for uid in all_user_ids]
+        cf_tail = [
+            cf_lookup.get(uid, np.zeros(_TAIL_DIM, dtype=np.float32))
             for uid in all_user_ids
-        ])
+        ]
 
-        # blend the two and L2-normalise so cosine similarity works correctly
-        self._user_embeddings = normalize(cf_w * cf_emb + (1.0 - cf_w) * content_emb)
+        self._user_embeddings = np.vstack([
+            self._compose_embedding(content_raw[i], tag_lookup.get(uid), cf_tail[i], cf_w)
+            for i, uid in enumerate(all_user_ids)
+        ])
 
         self._knn = NearestNeighbors(metric="cosine", algorithm="brute")
         self._knn.fit(self._user_embeddings)
@@ -484,26 +501,22 @@ class UserProfiler:
             )
 
         content_raw = self._encode_preferences(preference)
-        content_emb = _pad(content_raw[np.newaxis], self.embedding_dim)[0]
-        content_norm = np.linalg.norm(content_emb)
-        content_emb  = content_emb / (content_norm + 1e-9)
+        tag_vec = self._visits_to_tag_vector(visits) if self._tag_index and visits else (
+            self._visits_to_fixed_tag_vector(visits) if visits else None
+        )
 
         # no visit history, model not trained, or SVD unavailable — content-only
         if not self._is_fitted or not visits or self._svd is None:
-            return content_emb
+            return self._compose_embedding(content_raw, tag_vec)
 
-        tag_vec = self._visits_to_tag_vector(visits)
         cf_raw  = self._svd.transform(tag_vec[np.newaxis])
-        cf_emb  = _pad(cf_raw, self.embedding_dim)[0]
+        cf_emb  = _pad(cf_raw, _TAIL_DIM)[0]
         cf_norm = np.linalg.norm(cf_emb)
         if cf_norm < 1e-9:
-            return content_emb
+            return self._compose_embedding(content_raw, tag_vec)
         cf_emb /= cf_norm
 
-        # frozen at last fit() — use cached weight, not recomputed
-        combined = self._cf_w * cf_emb + (1.0 - self._cf_w) * content_emb
-        combined /= np.linalg.norm(combined) + 1e-9
-        return combined
+        return self._compose_embedding(content_raw, tag_vec, cf_emb, self._cf_w)
 
     def find_similar_users(
         self,
@@ -529,6 +542,9 @@ class UserProfiler:
     @classmethod
     def load(cls, path: str | Path) -> "UserProfiler":
         profiler = joblib.load(path)
+        # backward-compat: artifacts saved before place_tag_db was added won't have the attr
+        if not hasattr(profiler, "place_tag_db"):
+            profiler.place_tag_db = {}
         logger.info("UserProfiler loaded from %s", path)
         return profiler
 
@@ -540,22 +556,32 @@ class UserProfiler:
         # at 250 users: 0.80   (max CF contribution)
         return 0.8 * min(n_users / target_users, 1.0)
 
+    @staticmethod
+    def _recency_weight(created_at: str | None, half_life_days: float = 60.0) -> float:
+        if not created_at:
+            return 1.0
+        try:
+            from datetime import timezone as _tz
+            ts = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            days = (datetime.now(_tz.utc) - ts).total_seconds() / 86400
+            return math.exp(-math.log(2) * max(days, 0) / half_life_days)
+        except Exception:
+            return 1.0
+
     def _build_interaction_matrix(
         self,
         visits: list[UserVisit],
     ) -> tuple[csr_matrix, list[str], dict[str, int]]:
-        # sparse user × tag matrix; cell value = rating × visit_count
-        # unrated visits default to 3.0 (neutral)
-        all_tags_seen: set[str] = set(ALL_TAGS)
-        for v in visits:
-            all_tags_seen.update(v.get("tags") or [])
-        tag_index  = {tag: i for i, tag in enumerate(sorted(all_tags_seen))}
-        user_ids   = list(dict.fromkeys(v["user_id"] for v in visits))
+        # sparse user × tag matrix; cell = rating × visit_count × recency_weight
+        tagged_visits = [v for v in visits if v.get("tags")]
+        tag_index  = {tag: i for i, tag in enumerate(ALL_TAGS)}
+        user_ids   = list(dict.fromkeys(v["user_id"] for v in tagged_visits))
         user_index = {uid: i for i, uid in enumerate(user_ids)}
 
         rows, cols, data = [], [], []
-        for v in visits:
-            score = float(v.get("rating") or 3.0) * max(int(v.get("visit_count") or 1), 1)
+        for v in tagged_visits:
+            recency = self._recency_weight(v.get("created_at"))
+            score   = float(v.get("rating") or 3.0) * max(int(v.get("visit_count") or 1), 1) * recency
             for tag in (v.get("tags") or []):
                 if tag in tag_index:
                     rows.append(user_index[v["user_id"]])
@@ -576,6 +602,62 @@ class UserProfiler:
             for tag in (v.get("tags") or []):
                 if tag in self._tag_index:
                     vec[self._tag_index[tag]] += score
+        return vec
+
+    def _build_user_tag_lookup(
+        self,
+        visits: list[UserVisit],
+        tag_index: dict[str, int],
+    ) -> dict[str, np.ndarray]:
+        lookup: dict[str, np.ndarray] = {}
+        for v in visits:
+            tags = v.get("tags") or []
+            if not tags:
+                continue
+            uid = v["user_id"]
+            vec = lookup.setdefault(uid, np.zeros(len(tag_index), dtype=np.float32))
+            score = float(v.get("rating") or 3.0) * max(int(v.get("visit_count") or 1), 1)
+            for tag in tags:
+                if tag in tag_index:
+                    vec[tag_index[tag]] += score
+        return lookup
+
+    @staticmethod
+    def _compose_embedding(
+        content_raw: np.ndarray,
+        tag_vec:     np.ndarray | None = None,
+        cf_tail:     np.ndarray | None = None,
+        cf_w:        float = 0.0,
+    ) -> np.ndarray:
+        emb = np.zeros(EMBEDDING_DIM, dtype=np.float32)
+
+        survey_tags = content_raw[:_TAG_DIM]
+        if tag_vec is not None and np.linalg.norm(tag_vec) > 1e-9:
+            direct_tags = normalize(_pad(tag_vec[np.newaxis], _TAG_DIM))[0]
+            tag_w = cf_w if cf_w > 0 else 0.5
+            tag_part = (1.0 - tag_w) * survey_tags + tag_w * direct_tags
+        else:
+            tag_part = survey_tags
+        tag_norm = np.linalg.norm(tag_part)
+        emb[:_TAG_DIM] = tag_part / (tag_norm + 1e-9)
+
+        tail = _pad(content_raw[_TAG_DIM:][np.newaxis], _TAIL_DIM)[0]
+        if cf_tail is not None and np.linalg.norm(cf_tail) > 1e-9:
+            cf_tail = _pad(cf_tail[np.newaxis], _TAIL_DIM)[0]
+            tail = (1.0 - cf_w) * tail + cf_w * cf_tail
+        tail_norm = np.linalg.norm(tail)
+        emb[_TAG_DIM:] = tail / (tail_norm + 1e-9)
+
+        return emb
+
+    @staticmethod
+    def _visits_to_fixed_tag_vector(visits: list[UserVisit]) -> np.ndarray:
+        vec = np.zeros(_TAG_DIM, dtype=np.float32)
+        for v in visits:
+            score = float(v.get("rating") or 3.0) * max(int(v.get("visit_count") or 1), 1)
+            for tag in (v.get("tags") or []):
+                if tag in _TAG_IDX:
+                    vec[_TAG_IDX[tag]] += score
         return vec
 
     @staticmethod

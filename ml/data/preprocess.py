@@ -29,6 +29,9 @@ class PlaceRecord(TypedDict, total=False):
     hours:         Optional[str]
     attributes:    Optional[dict[str, Any]]   # GoodForKids, DogsAllowed, etc.
     tags:          Optional[list[str]]        # filled in by Stage 1
+    score:          Optional[float]
+    score_breakdown: Optional[dict[str, float]]
+    fallback:       bool
 
 
 class UserPreference(TypedDict, total=False):
@@ -70,6 +73,7 @@ class UserVisit(TypedDict, total=False):
     rating:      Optional[float]   # 1–5; None if not explicitly rated
     visit_count: int                # ≥ 1
     tags:        list[str]          # Stage 1 tags used as the CF signal
+    created_at:  Optional[str]      # ISO-8601; used for recency decay at train time
 
 
 # Foursquare TIST 2015 loaders

@@ -31,6 +31,7 @@ class UserVisitSchema(BaseModel):
     rating:      Optional[float] = None
     visit_count: int = 1
     tags:        list[str] = []
+    created_at:  Optional[str] = None
 
 
 class PlaceRecordSchema(BaseModel):
@@ -54,33 +55,37 @@ class PlaceRecordSchema(BaseModel):
     attributes:   Optional[dict[str, Any]] = None
     tags:         Optional[list[str]] = None
 
-    score:          Optional[float] = None
-    _cf_score:      Optional[float] = None
-    _tag_score:     Optional[float] = None
-    _pop_score:     Optional[float] = None
-    _cuisine_bonus: Optional[float] = None
-    _party_match:   Optional[float] = None
-    _fallback:      Optional[bool]  = None
+    score:           Optional[float] = None
+    score_breakdown: Optional[dict[str, float]] = None
+    fallback:        bool = False
 
 
 class RecommendRequest(BaseModel):
-    preference: UserPreferenceSchema
-    places:     list[PlaceRecordSchema]
-    visits:     Optional[list[UserVisitSchema]] = None
-    top_k:      int = 20
+    preference:          UserPreferenceSchema
+    places:              list[PlaceRecordSchema]
+    visits:              Optional[list[UserVisitSchema]] = None
+    top_k:               int = 20
+    excluded_place_ids:  list[str] = []
 
 
 class RecommendResponse(BaseModel):
     places: list[PlaceRecordSchema]
 
 
+class HotelLocationSchema(BaseModel):
+    latitude:  float
+    longitude: float
+
+
 class ItineraryRequest(BaseModel):
-    preference:  UserPreferenceSchema
-    places:      list[PlaceRecordSchema]
-    visits:      Optional[list[UserVisitSchema]] = None
-    top_k:       int = 20
-    trip_days:   int = 1
-    start_date:  Optional[str] = None
+    preference:          UserPreferenceSchema
+    places:              list[PlaceRecordSchema]
+    visits:              Optional[list[UserVisitSchema]] = None
+    top_k:               int = 20
+    trip_days:           int = 1
+    start_date:          Optional[str] = None
+    hotel_location:      Optional[HotelLocationSchema] = None
+    excluded_place_ids:  list[str] = []
 
 
 class TravelLegSchema(BaseModel):

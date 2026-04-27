@@ -15,3 +15,4 @@ ortools
 bcrypt
 postgrest
 pydantic
+httpx
