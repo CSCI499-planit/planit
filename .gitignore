@@ -13,7 +13,7 @@ dist/
 build/
 data/review*
 
-# personal takeout data
+# Ahmed's personal takeout data
 data/AhmedTakeout/
 
 # generated artifacts and evaluation outputs
@@ -25,3 +25,6 @@ ml/eval_*.py
 
 # demo script outputs
 demo/artifacts/
+
+# local dev scripts
+ml/data/interactive_feedback.py

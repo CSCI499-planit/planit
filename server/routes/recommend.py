@@ -50,10 +50,8 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
         .data or []
     )
 
-    excluded: list[str] = [
-        row["place_id"] for row in interactions
-        if row.get("event_type") in _NEGATIVE_EVENTS
-    ]
+    # exclude every place the user has already interacted with (novelty)
+    excluded: list[str] = list({row["place_id"] for row in interactions})
 
     # aggregate interactions per place (avg implicit rating)
     agg: dict[str, dict] = {}

@@ -46,6 +46,40 @@ def geocode_location(location: str) -> tuple[float, float]:
     return float(coords[1]), float(coords[0])  # lat, lon
 
 
+def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
+    """Return up to `limit` ranked location matches for a free-text query.
+
+    Each entry: {"display": str, "lat": float, "lon": float}
+    Returns an empty list when nothing is found (never raises on empty results).
+    """
+    resp = httpx.get(
+        "https://api.geoapify.com/v1/geocode/search",
+        params={"text": query, "limit": limit, "apiKey": _api_key()},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    results = []
+    for feat in resp.json().get("features", []):
+        props  = feat.get("properties", {})
+        coords = feat.get("geometry", {}).get("coordinates", [])
+        if len(coords) < 2:
+            continue
+        display = (
+            props.get("formatted")
+            or ", ".join(filter(None, [
+                props.get("name"), props.get("city"),
+                props.get("state"), props.get("country"),
+            ]))
+            or query
+        )
+        results.append({
+            "display": display,
+            "lat":     float(coords[1]),
+            "lon":     float(coords[0]),
+        })
+    return results
+
+
 def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
     url = (
         f"https://api.geoapify.com/v2/places"
