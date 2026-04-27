@@ -1,84 +1,131 @@
-{"users":[
+{
+  "users": [
     {
-        "user_id": "wedfghjmnbfr",
-        "username":"user1",
-        "use_case": "local",
-        "part_type": "couple",
-        "daily_budget_tier": "2",
-        "trip_budget_tier": "2",
-        "preferred_tags": ["cultural","food_and_drink","shopping"],
-        "exploration_score":"3",
-        "popularity_weight":"2",
-        "cuisines_prefrences":["Mexican", "Asian", "American"],
-        "dietary_restriction":[],
-        "travel_mode":[],
-        "max_travel_minutes":"< 10",
-        "itinerary_pace":"4"
+      "user_id": "wedfghjmnbfr",
+      "username": "user1",
+      "use_case": "local",
+      "daily_budget_tier": 2,
+      "trip_budget_tier": 2,
+      "preferred_tags": [
+        "cultural",
+        "food_and_drink",
+        "shopping"
+      ],
+      "exploration_score": 3,
+      "popularity_weight": 2,
+      "cuisine_preferences": [
+        "mexican",
+        "east asian",
+        "american"
+      ],
+      "dietary_restrictions": [],
+      "travel_mode": [
+        "transit"
+      ],
+      "max_travel_minutes": "< 10",
+      "itinerary_pace": "balanced",
+      "party_type": "couple"
     },
     {
-        "user_id": "oikjhgvfd",
-        "username":"user2",
-        "use_case": "local",
-        "part_type": "couple",
-        "daily_budget_tier": "2",
-        "trip_budget_tier": "2",
-        "preferred_tags": ["cultural","food_and_drink","shopping"],
-        "exploration_score":"3",
-        "popularity_weight":"2",
-        "cuisines_prefrences":["Mexican", "Asian", "American"],
-        "dietary_restriction":[],
-        "travel_mode":["walking"],
-        "max_travel_minutes":"> 40",
-        "itinerary_pace":"6"
+      "user_id": "oikjhgvfd",
+      "username": "user2",
+      "use_case": "local",
+      "daily_budget_tier": 2,
+      "trip_budget_tier": 2,
+      "preferred_tags": [
+        "cultural",
+        "food_and_drink",
+        "shopping"
+      ],
+      "exploration_score": 3,
+      "popularity_weight": 2,
+      "cuisine_preferences": [
+        "mexican",
+        "east asian",
+        "american"
+      ],
+      "dietary_restrictions": [],
+      "travel_mode": [
+        "walk"
+      ],
+      "max_travel_minutes": "> 40",
+      "itinerary_pace": "packed",
+      "party_type": "couple"
     },
     {
-        "user_id": "qasdfghj",
-        "username":"user3",
-        "use_case": "local",
-        "part_type": "couple",
-        "daily_budget_tier": "2",
-        "trip_budget_tier": "2",
-        "preferred_tags": ["cultural","food_and_drink","shopping"],
-        "exploration_score":"3",
-        "popularity_weight":"2",
-        "cuisines_prefrences":["Asian"],
-        "dietary_restriction":["walking", "public transit"],
-        "travel_mode":[],
-        "max_travel_minutes":"10-20",
-        "itinerary_pace":"4"
+      "user_id": "qasdfghj",
+      "username": "user3",
+      "use_case": "local",
+      "daily_budget_tier": 2,
+      "trip_budget_tier": 2,
+      "preferred_tags": [
+        "cultural",
+        "food_and_drink",
+        "shopping"
+      ],
+      "exploration_score": 3,
+      "popularity_weight": 2,
+      "cuisine_preferences": [
+        "east asian"
+      ],
+      "dietary_restrictions": [],
+      "travel_mode": [
+        "walk",
+        "transit"
+      ],
+      "max_travel_minutes": "10-20",
+      "itinerary_pace": "balanced",
+      "party_type": "couple"
     },
     {
-        "user_id": "wsdfghjk",
-        "username":"user4",
-        "use_case": "local",
-        "part_type": "couple",
-        "daily_budget_tier": "2",
-        "trip_budget_tier": "2",
-        "preferred_tags": ["cultural","food_and_drink","shopping"],
-        "exploration_score":"3",
-        "popularity_weight":"2",
-        "cuisines_prefrences":["American"],
-        "dietary_restriction":[],
-        "travel_mode":["driving","biking"],
-        "max_travel_minutes":"< 10",
-        "itinerary_pace":"2"
+      "user_id": "wsdfghjk",
+      "username": "user4",
+      "use_case": "local",
+      "daily_budget_tier": 2,
+      "trip_budget_tier": 2,
+      "preferred_tags": [
+        "cultural",
+        "food_and_drink",
+        "shopping"
+      ],
+      "exploration_score": 3,
+      "popularity_weight": 2,
+      "cuisine_preferences": [
+        "american"
+      ],
+      "dietary_restrictions": [],
+      "travel_mode": [
+        "drive",
+        "bike"
+      ],
+      "max_travel_minutes": "< 10",
+      "itinerary_pace": "relaxed",
+      "party_type": "couple"
     },
     {
-        "user_id": "okjnbvcd",
-        "username":"user5",
-        "use_case": "local",
-        "part_type": "couple",
-        "daily_budget_tier": "2",
-        "trip_budget_tier": "2",
-        "preferred_tags": ["cultural","food_and_drink","shopping"],
-        "exploration_score":"3",
-        "popularity_weight":"2",
-        "cuisines_prefrences":["Mexican"],
-        "dietary_restriction":[],
-        "travel_mode":["walking","driving"],
-        "max_travel_minutes":"< 10",
-        "itinerary_pace":"6"
+      "user_id": "okjnbvcd",
+      "username": "user5",
+      "use_case": "local",
+      "daily_budget_tier": 2,
+      "trip_budget_tier": 2,
+      "preferred_tags": [
+        "cultural",
+        "food_and_drink",
+        "shopping"
+      ],
+      "exploration_score": 3,
+      "popularity_weight": 2,
+      "cuisine_preferences": [
+        "mexican"
+      ],
+      "dietary_restrictions": [],
+      "travel_mode": [
+        "walk",
+        "drive"
+      ],
+      "max_travel_minutes": "< 10",
+      "itinerary_pace": "packed",
+      "party_type": "couple"
     }
-
-]
+  ]
 }
