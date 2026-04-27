@@ -460,7 +460,7 @@ class RouteOptimizer:
                                             locations[j][0], locations[j][1])
                     raw_time = max(1, round((dist_km / speed) * 60))
 
-                    if i != 0 and j != 0 and raw_time > max_travel_min:
+                    if j != 0 and raw_time > max_travel_min:
                         row.append(raw_time + _LONG_ARC_PENALTY)
                     else:
                         row.append(raw_time)

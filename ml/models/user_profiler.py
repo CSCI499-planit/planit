@@ -1,6 +1,6 @@
 # Stage 2 — user preference profiling
 # Keeps tag slots clean, stores CF signal in the remaining embedding dims.
-# CF weight ramps continuously from 0 → 0.8 as the user base grows to 250.
+# CF weight ramps continuously from 0 → 0.8 as the user base grows to 100.
 
 from __future__ import annotations
 
@@ -549,11 +549,11 @@ class UserProfiler:
         return profiler
 
     @staticmethod
-    def _cf_weight(n_users: int, target_users: int = 250) -> float:
-        # ramps CF contribution 0 → 0.8 as user count grows 0 → 250
-        # at  6 users: ~0.019  (near-zero, content dominates)
-        # at 50 users:  0.16
-        # at 250 users: 0.80   (max CF contribution)
+    def _cf_weight(n_users: int, target_users: int = 100) -> float:
+        # ramps CF contribution 0 → 0.8 as user count grows 0 → 100
+        # at 29 users: 0.23   (meaningful signal even at current scale)
+        # at 50 users: 0.40
+        # at 100 users: 0.80  (max CF contribution)
         return 0.8 * min(n_users / target_users, 1.0)
 
     @staticmethod

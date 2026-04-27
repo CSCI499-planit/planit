@@ -23,7 +23,7 @@ _POPULARITY_NORM = 25.0  # gentler curve so one viral venue doesn't dominate
 
 # Bayesian prior shrinks unreviewed places toward 3.5 rather than zeroing them
 _PRIOR_RATING = 3.5
-_PRIOR_COUNT  = 10
+_PRIOR_COUNT = 10
 
 # only hard-filter diets Geoapify can actually confirm
 _HARD_DIETARY = {"vegetarian", "vegan"}
@@ -91,6 +91,11 @@ def _passes_dietary_filter(place: PlaceRecord, dietary: set[str]) -> bool:
 
 class HybridRecommender:
 
+    def __init__(self) -> None:
+        # populated by _fetch_and_train; used as pop_score proxy when
+        # Geoapify returns null rating/review_count
+        self.interaction_counts: dict[str, int] = {}
+
     def _score_place_with_breakdown(
         self,
         user_embedding: np.ndarray,
@@ -103,7 +108,7 @@ class HybridRecommender:
         }
         place_tags = set(place.get("tags") or [])
 
-        price       = place.get("price_level")
+        price = place.get("price_level")
         budget_tier = preference.get("daily_budget_tier") or 4
         if price is not None and price > budget_tier:
             return _zero
@@ -116,23 +121,35 @@ class HybridRecommender:
         place_emb = _place_embedding(place)
 
         # slice user embedding to tag subspace so both vectors are _N_TAGS-dim
-        cf_score = max(0.0, cosine_similarity(user_embedding[:_N_TAGS], place_emb))
+        cf_score = max(0.0, cosine_similarity(
+            user_embedding[:_N_TAGS], place_emb))
 
         preferred = preference.get("preferred_tags") or []
         tag_score = len(set(preferred) & place_tags) / max(len(preferred), 1)
 
-        rating       = place.get("rating")
+        rating = place.get("rating")
         review_count = place.get("review_count")
-        pop_weight   = (preference.get("popularity_weight") or 3) / 5.0
+        pop_weight = (preference.get("popularity_weight") or 3) / 5.0
 
         if rating is not None and review_count is not None:
             rc = float(review_count)
             bayesian = (_PRIOR_COUNT * _PRIOR_RATING + rc *
                         float(rating)) / (_PRIOR_COUNT + rc)
             raw_pop = bayesian * math.log1p(rc)
-            popularity_score = min(raw_pop / _POPULARITY_NORM, 1.0) * pop_weight
+            popularity_score = min(
+                raw_pop / _POPULARITY_NORM, 1.0) * pop_weight
         else:
-            popularity_score = 0.0
+            # Geoapify free tier never returns rating/review_count.
+            # Use accumulated interaction count as an engagement proxy:
+            # places that more users have liked/visited score higher.
+            proxy_count = self.interaction_counts.get(
+                place.get("place_id") or "", 0)
+            if proxy_count > 0:
+                raw_pop = _PRIOR_RATING * math.log1p(proxy_count)
+                popularity_score = min(
+                    raw_pop / _POPULARITY_NORM, 1.0) * pop_weight
+            else:
+                popularity_score = 0.0
 
         cuisine_bonus = 0.0
         if "food_and_drink" in place_tags:
@@ -143,10 +160,10 @@ class HybridRecommender:
                 if any(c.lower() in place_cuisines for c in cuisines):
                     cuisine_bonus = 1.0
 
-        party_type    = preference.get("party_type", "")
+        party_type = preference.get("party_type", "")
         affinity_tags = set(_PARTY_TAG_AFFINITIES.get(party_type, []))
-        party_match   = (len(affinity_tags & place_tags) / len(affinity_tags)
-                         if affinity_tags else 0.0)
+        party_match = (len(affinity_tags & place_tags) / len(affinity_tags)
+                       if affinity_tags else 0.0)
 
         score = min(
             0.30 * cf_score

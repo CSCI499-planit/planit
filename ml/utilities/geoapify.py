@@ -93,6 +93,30 @@ def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) 
     return parse_geoapify_response(resp.json())
 
 
+def fetch_places_enriched(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
+    """Like fetch_places() but runs OSM enrichment in parallel for better tagging.
+
+    Use this when you have coordinates and want richer attributes
+    (historic, viewpoint, garden, natural features) without the extra
+    round-trip latency of sequential requests.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        geo_future = pool.submit(fetch_places, lat, lon, radius_m=radius_m, limit=limit)
+        osm_future = pool.submit(fetch_osm_features, lat, lon, radius_m=radius_m)
+
+        places = geo_future.result()
+        try:
+            osm_features = osm_future.result()
+            places = enrich_places_with_osm(places, osm_features)
+        except Exception as e:
+            logger.warning("OSM enrichment failed (skipping): %s", e)
+
+    return _deduplicate_by_name(places)
+
+
 def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
     from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
     lat, lon = geocode_location(location)

@@ -249,6 +249,18 @@ def _fetch_and_train(pipeline: MLPipeline) -> MLPipeline:
     else:
         logger.warning("No preference data in Supabase — cold-start mode.")
 
+    # Compute per-place interaction counts as a popularity proxy.
+    # Geoapify free tier never returns rating/review_count, so pop_score is
+    # permanently 0 without this. Counts reflect real user engagement.
+    from collections import Counter
+    interaction_counts = dict(Counter(
+        str(row.get("place_id", ""))
+        for row in interactions
+        if row.get("place_id")
+    ))
+    pipeline._recommender.interaction_counts = interaction_counts
+    logger.info("interaction_counts: %d unique places.", len(interaction_counts))
+
     if prefs:
         pipeline.train_stage2(visits=tagged_visits, preferences=prefs)
         pipeline.save()
@@ -336,21 +348,14 @@ async def webhook_interactions(request: Request, background_tasks: BackgroundTas
     return {"status": "ok", "pending": pending, "retrain_scheduled": should_retrain}
 
 
-@app.post("/admin/retrain")
-async def retrain():
-    # manual hot-swap — lock prevents overlapping retrain jobs
+@app.post("/admin/retrain", status_code=202)
+async def retrain(background_tasks: BackgroundTasks):
+    # Schedules a hot-swap retrain in the background and returns immediately.
+    # The 202 response means "accepted" — use /health to confirm the swap landed.
     if app.state.retrain_lock.locked():
         raise HTTPException(status_code=409, detail="Retrain already in progress.")
-    async with app.state.retrain_lock:
-        try:
-            new_pipeline = await asyncio.to_thread(_fetch_and_train, app.state.pipeline)
-            app.state.pipeline        = new_pipeline
-            app.state.place_tag_db    = new_pipeline.user_profiler.place_tag_db
-            app.state.last_retrain_at = datetime.now(timezone.utc)
-            return {"status": "ok", "detail": "Pipeline retrained and swapped."}
-        except Exception as e:
-            logger.error("Retrain failed: %s", e, exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Retrain failed: {e}")
+    background_tasks.add_task(_do_retrain)
+    return {"status": "accepted", "detail": "Retrain scheduled."}
 
 
 if __name__ == "__main__":
