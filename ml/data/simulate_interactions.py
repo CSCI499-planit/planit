@@ -1,18 +1,23 @@
 """
-generating synthetic interactions for
-the 29 existing preference-survey users.
+Generates synthetic interactions for the 27 existing preference-survey users
+to bootstrap collaborative filtering past MIN_SVD_USERS=20.
 
-Candidate places: TBD
+Inspired by the synthetic interaction bootstrapping approach in:
+  Javvadhi & Yogi (2025), "Cold Start to Warm Glow: Tackling Sparsity and
+  Scalability in Modern Recommender Systems" (Section 4.5 — synthetic dataset construction)
+  Full paper can be found at docs/references/javvadhi_yogi_2025_cold_start.pdf
 
+Candidate places: uses place_ids in recommendation_logs.
 Decision logic (persona matching):
-  - LIKE   → place assigned user's preferred_tags (rating 4.5)
-  - UNLIKE → place assigned party-aversion tags (rating 1.0)
+  - LIKE   → place tagged with a rich signal derived from the user's full
+              preference profile: preferred_tags as base, extended with budget,
+              exploration score, pace, use_case, dietary, and cuisine signals
+  - UNLIKE → place tagged with party-aversion tags
 
-Users are grouped by party_type so users in the same group share overlapping
-liked places — this creates within-group correlation that SVD can detect.
+Users grouped by party_type share a pool of liked places (60% overlap) so
+SVD can detect within-group correlation. like_tags are further differentiated
+per user so the user×tag CF matrix has more signal than party_type alone.
 
-NOTE: Each INSERT fires the Supabase retrain webhook trigger. The ML service's
-1-hour cooldown and retrain lock prevent runaway retraining.
 """
 
 from __future__ import annotations
@@ -30,10 +35,11 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# ── place holders - can be configured ──────────────────────────────────────────────────────────────────
+# ── Configurable ──────────────────────────────────────────────────────────────────
 LIKES_PER_USER = 15   # positive interactions per user
-UNLIKES_PER_USER = 5    # negative interactions per user
-# timestamps spread over this many past days. If too short, retrain may not pick up new interactions due to recency bias.
+UNLIKES_PER_USER = 5  # negative interactions per user
+# timestamps spread over this many past days. If too short, retrain may not
+# pick up new interactions due to recency bias.
 DAYS_SPREAD = 80
 RANDOM_SEED = 42
 TABLE = "user_interactions"
@@ -42,7 +48,7 @@ USER_TABLE = "user"
 SHARED_POOL_PCT = 0.6
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Aversion tags by party type. Placed on unliked interactions
+# Aversion tags by party type, stamped on unlike interactions
 _PARTY_AVERSION: dict[str, list[str]] = {
     "solo":    ["family_friendly"],
     "couple":  ["family_friendly", "nightlife"],
@@ -51,7 +57,7 @@ _PARTY_AVERSION: dict[str, list[str]] = {
     "mixed":   ["nightlife"],
 }
 
-# Tags most aligned with each party type. Used for liked interactions
+# Fallback preferred tags by party type, used only when preferred_tags is empty
 _PARTY_PREFERRED: dict[str, list[str]] = {
     "solo":    ["cultural", "scenic", "historical", "quick_visit"],
     "couple":  ["romantic", "upscale", "scenic", "food_and_drink"],
@@ -85,7 +91,8 @@ def _paginate(sb, table: str, page_size: int = 1000) -> list[dict]:
 
 
 def _ensure_stub_users(sb, user_ids: list[str], existing_ids: set[str]) -> None:
-    # user_interactions.user_id is a FK to user.id preference user_ids are random UUIDs that may not exist in the user table yet
+    # user_interactions.user_id is a FK to user.id. preference user_ids are
+    # random UUIDs that may not exist in the user table yet
     missing = [uid for uid in user_ids if uid not in existing_ids]
     if not missing:
         return
@@ -134,12 +141,13 @@ def run(dry_run: bool = False) -> None:
     logger.info("  %d existing interactions", len(existing_ints))
 
     # ── group place pool by party_type for within-group CF signal ─────────────
-    # Sort place_ids so the shared pools are deterministic
+    # Sort place_ids so the shared pools are deterministic across runs
     sorted_places = sorted(candidate_place_ids)
     group_pools: dict[str, list[str]] = {}
     for party in _PARTY_PREFERRED:
-        random.shuffle(sorted_places)
-        group_pools[party] = sorted_places[:]
+        shuffled = sorted_places[:]
+        random.shuffle(shuffled)
+        group_pools[party] = shuffled
 
     # ── build interaction rows ────────────────────────────────────────────────
     pref_user_ids = [str(p.get("user_id") or "")
@@ -155,9 +163,45 @@ def run(dry_run: bool = False) -> None:
             continue
 
         party = (pref.get("party_type") or "mixed").lower()
+
+        # Build like_tags from the user's full preference profile
         pref_tags = list(pref.get("preferred_tags") or []
                          ) or _PARTY_PREFERRED.get(party, ["outdoor"])
-        like_tags = pref_tags[:4]  # cap at 4 most relevant tags per place
+        derived: list[str] = []
+
+        budget = pref.get("daily_budget_tier") or 0
+        if budget in (1, 2):
+            derived.append("budget_friendly")
+        elif budget in (3, 4):
+            derived.append("upscale")
+
+        if (pref.get("exploration_score") or 0) >= 4:
+            derived.append("adventurous")
+
+        pace = (pref.get("itinerary_pace") or "").lower()
+        if pace == "relaxed":
+            derived += ["scenic", "wellness"]
+
+        use_case = (pref.get("use_case") or "").lower()
+        if use_case == "travel":
+            derived += ["cultural", "historical"]
+        elif use_case == "local":
+            derived.append("quick_visit")
+
+        dietary = pref.get("dietary_restrictions") or []
+        if any(d in dietary for d in ("halal", "vegetarian", "vegan")):
+            derived.append("food_and_drink")
+
+        if pref.get("cuisines_preferences"):
+            derived.append("food_and_drink")
+
+        seen: set[str] = set(pref_tags)
+        for tag in derived:
+            if tag not in seen:
+                pref_tags.append(tag)
+                seen.add(tag)
+
+        like_tags = pref_tags
         unlike_tags = _PARTY_AVERSION.get(party, ["nightlife"])
 
         pool = group_pools.get(party, sorted_places)[:]
@@ -223,7 +267,7 @@ def run(dry_run: bool = False) -> None:
     for i in range(0, len(rows_to_insert), PAGE):
         batch = rows_to_insert[i: i + PAGE]
         sb.table(TABLE).insert(batch).execute()
-        logger.info("  inserted rows %d–%d", i + 1, i + len(batch))
+        logger.info("  inserted rows %d-%d", i + 1, i + len(batch))
 
     logger.info("Done. %d interactions written.", len(rows_to_insert))
     logger.info("Trigger /admin/retrain on the ML service to apply immediately.")

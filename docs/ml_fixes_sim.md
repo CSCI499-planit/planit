@@ -4,7 +4,7 @@ _2026-04-26_
 
 ---
 
-## Critical Fix: CF Never Trained
+## Critical Fix: CF Cold Start
 
 `place` table is always empty. Places come from Geoapify per-request and were never persisted. `place_tag_db` was always `{}` at retrain time, every interaction had `tags=[]`, CF matrix stayed at 0 rows.
 
