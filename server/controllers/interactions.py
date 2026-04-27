@@ -2,12 +2,16 @@
 Implicit feedback interaction logging.
 Called whenever a user views, saves, or adds a place to their itinerary.
 These events feed into the CF interaction matrix at retrain time.
-
-EVENT_RATINGS is the single source of truth for event-to-rating mapping.
-Defined in ml/models/user_profiler.py — do not redefine it here.
 """
 from server.config.db import supabase
-from ml.models.user_profiler import EVENT_RATINGS  # single source of truth
+
+# Keep in sync with EVENT_RATINGS in ml/models/user_profiler.py
+EVENT_RATINGS: dict[str, float] = {
+    "like":              4.5,
+    "unlike":            1.0,
+    "itinerary_like":    5.0,
+    "itinerary_dislike": 1.0,
+}
 
 INTERACTIONS_TABLE = 'user_interactions'
 
