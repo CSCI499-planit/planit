@@ -19,6 +19,7 @@
   align-items: center;
   overflow: hidden;
   position: relative;
+  animation: floatEarth 6s ease-in-out infinite;
 }
 
 .hero__content {
@@ -213,5 +214,14 @@
     width: 100vw;
     max-width: 100%;
     margin: 2rem -1rem 0;
+  }
+}
+
+@keyframes floatEarth {
+  0%, 100% {
+    background-position: 85% 50%, 175% center;
+  }
+  50% {
+    background-position: 85% 45%, 175% center;
   }
 }

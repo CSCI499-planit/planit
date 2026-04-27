@@ -32,7 +32,7 @@ export default function LandingPage() {
           itinerary automatically. No more tab-hopping, no more guesswork.
         </p>
         <div className="hero__ctas">
-          <button className="btn btn--primary" onClick={() => navigate('/app/home')}>Start Planning for Free!</button>
+          <button className="btn btn--primary" onClick={() => navigate('/signup')}>Start Planning for Free!</button>
           <button className="btn btn--secondary">Learn More</button>
         </div>
         <div className="hero__stats">
