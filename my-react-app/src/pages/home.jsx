@@ -20,7 +20,7 @@ export default function HomePage() {
           ['Active Trips', '1'],
           ['Countries', '20'],
           ['Days Planned', '40'],
-          ['Total Spent This Year', '$2,300'],
+          ['Total Spent This Year', '2,300'],
           ['Trips Completed', '5'],
         ].map(([label, val]) => (
           <div className="stats-card" key={label}>

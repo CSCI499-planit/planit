@@ -1,6 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { FaHome, FaSearchLocation, FaUser, FaBell, FaRegBell, FaCog, FaGlobeAmericas} from 'react-icons/fa'
-import { HiCog } from "react-icons/hi2";
+import { FaHome, FaSearchLocation, FaUser, FaBell, FaGlobeAmericas } from 'react-icons/fa'
 
 export default function Navbar() {
   const location = useLocation()
@@ -17,7 +16,6 @@ export default function Navbar() {
       </div>
       <div className="nav__right">
         <button className="nav__icon"><FaBell /></button>
-        <button className="nav__icon"><HiCog /></button>
       </div>
     </nav>
   )
