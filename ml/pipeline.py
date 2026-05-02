@@ -120,7 +120,8 @@ class MLPipeline:
     ) -> None:
         import os
         from supabase import create_client
-        sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+        key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY", "")
+        sb = create_client(os.getenv("SUPABASE_URL", ""), key)
         rows = [
             {
                 "user_id":       user_id,
@@ -135,16 +136,7 @@ class MLPipeline:
 
     @staticmethod
     def _score_features(place: PlaceRecord) -> dict:
-        bd = place.get("score_breakdown")
-        if isinstance(bd, dict):
-            return bd
-        return {
-            "cf_score":      place.get("_cf_score",      0.0),
-            "tag_score":     place.get("_tag_score",     0.0),
-            "pop_score":     place.get("_pop_score",     0.0),
-            "cuisine_bonus": place.get("_cuisine_bonus", 0.0),
-            "party_match":   place.get("_party_match",   0.0),
-        }
+        return place.get("score_breakdown") or {}
 
     def run_stage4(
         self,

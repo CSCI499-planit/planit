@@ -35,20 +35,16 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# ── Configurable ──────────────────────────────────────────────────────────────────
-LIKES_PER_USER = 15   # positive interactions per user
-UNLIKES_PER_USER = 5  # negative interactions per user
-# timestamps spread over this many past days. If too short, retrain may not
-# pick up new interactions due to recency bias.
-DAYS_SPREAD = 80
-RANDOM_SEED = 42
-TABLE = "user_interactions"
-USER_TABLE = "user"
-# fraction of likes drawn from group-shared pool (for CF signal)
-SHARED_POOL_PCT = 0.6
+# ── Configurable ──────────────────────────────────────────────────────────────
+LIKES_PER_USER    = 15   # positive interactions per user
+UNLIKES_PER_USER  = 5    # negative interactions per user
+DAYS_SPREAD       = 80   # timestamps spread over this many past days
+RANDOM_SEED       = 42
+TABLE             = "user_interactions"
+USER_TABLE        = "user"
+SHARED_POOL_PCT   = 0.6  # fraction of likes drawn from group-shared pool
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Aversion tags by party type, stamped on unlike interactions
 _PARTY_AVERSION: dict[str, list[str]] = {
     "solo":    ["family_friendly"],
     "couple":  ["family_friendly", "nightlife"],
@@ -57,7 +53,6 @@ _PARTY_AVERSION: dict[str, list[str]] = {
     "mixed":   ["nightlife"],
 }
 
-# Fallback preferred tags by party type, used only when preferred_tags is empty
 _PARTY_PREFERRED: dict[str, list[str]] = {
     "solo":    ["cultural", "scenic", "historical", "quick_visit"],
     "couple":  ["romantic", "upscale", "scenic", "food_and_drink"],
@@ -90,19 +85,65 @@ def _paginate(sb, table: str, page_size: int = 1000) -> list[dict]:
     return rows
 
 
-def _ensure_stub_users(sb, user_ids: list[str], existing_ids: set[str]) -> None:
-    # user_interactions.user_id is a FK to user.id. preference user_ids are
-    # random UUIDs that may not exist in the user table yet
+def _ensure_stub_users(sb, user_ids: list[str], existing_ids: set[str]) -> set[str]:
+    """Upsert a user-table row for every preference user_id that has no row yet.
+
+    Returns the set of user_ids that were successfully upserted (i.e. now present
+    in the user table), so the caller can verify UUID consistency.
+    """
     missing = [uid for uid in user_ids if uid not in existing_ids]
     if not missing:
-        return
+        logger.info("All %d preference user_ids already have a user row.", len(user_ids))
+        return existing_ids
+
     stubs = [
         {"id": uid, "name": f"sim_{uid[:8]}", "email": f"sim_{uid}@planit.sim"}
         for uid in missing
     ]
-    logger.info(
-        "Creating %d stub user row(s) for missing FK references…", len(stubs))
+    logger.info("Creating %d stub user row(s) for missing FK references…", len(stubs))
     sb.table(USER_TABLE).upsert(stubs, on_conflict="id").execute()
+
+    return existing_ids | set(missing)
+
+
+def _verify_uuid_consistency(sb, pref_user_ids: list[str]) -> bool:
+    """Check that every preference user_id exists in both user and user_interactions.
+
+    Logs a clear report and returns True only when all UUIDs are consistent.
+    """
+    pref_set = set(pref_user_ids)
+
+    user_ids    = {str(r["id"])      for r in _paginate(sb, USER_TABLE)}
+    int_user_ids = {str(r["user_id"]) for r in _paginate(sb, TABLE)}
+
+    missing_from_user = pref_set - user_ids
+    missing_from_ints = pref_set - int_user_ids
+
+    ok = True
+
+    if missing_from_user:
+        logger.error(
+            "UUID mismatch — %d preference user_id(s) have no row in '%s':\n  %s",
+            len(missing_from_user), USER_TABLE,
+            "\n  ".join(sorted(missing_from_user)),
+        )
+        ok = False
+    else:
+        logger.info("UUID check — all %d user_ids present in '%s'. OK", len(pref_set), USER_TABLE)
+
+    if missing_from_ints:
+        logger.warning(
+            "UUID check — %d preference user_id(s) have no interactions yet:\n  %s",
+            len(missing_from_ints),
+            "\n  ".join(sorted(missing_from_ints)),
+        )
+        # Not a hard failure — users with no candidate place_ids get skipped
+    else:
+        logger.info(
+            "UUID check — all %d user_ids present in '%s'. OK", len(pref_set), TABLE
+        )
+
+    return ok
 
 
 def run(dry_run: bool = False) -> None:
@@ -122,8 +163,7 @@ def run(dry_run: bool = False) -> None:
 
     logger.info("Fetching candidate place_ids from recommendation_logs…")
     rec_logs = _paginate(sb, "recommendation_logs")
-    candidate_place_ids = list({r["place_id"]
-                               for r in rec_logs if r.get("place_id")})
+    candidate_place_ids = list({r["place_id"] for r in rec_logs if r.get("place_id")})
     logger.info("  %d unique place_ids available", len(candidate_place_ids))
 
     if not candidate_place_ids:
@@ -141,7 +181,6 @@ def run(dry_run: bool = False) -> None:
     logger.info("  %d existing interactions", len(existing_ints))
 
     # ── group place pool by party_type for within-group CF signal ─────────────
-    # Sort place_ids so the shared pools are deterministic across runs
     sorted_places = sorted(candidate_place_ids)
     group_pools: dict[str, list[str]] = {}
     for party in _PARTY_PREFERRED:
@@ -150,8 +189,7 @@ def run(dry_run: bool = False) -> None:
         group_pools[party] = shuffled
 
     # ── build interaction rows ────────────────────────────────────────────────
-    pref_user_ids = [str(p.get("user_id") or "")
-                     for p in prefs if p.get("user_id")]
+    pref_user_ids = [str(p.get("user_id") or "") for p in prefs if p.get("user_id")]
     rows_to_insert: list[dict] = []
     stats: dict[str, int] = {"like": 0, "unlike": 0}
 
@@ -164,9 +202,7 @@ def run(dry_run: bool = False) -> None:
 
         party = (pref.get("party_type") or "mixed").lower()
 
-        # Build like_tags from the user's full preference profile
-        pref_tags = list(pref.get("preferred_tags") or []
-                         ) or _PARTY_PREFERRED.get(party, ["outdoor"])
+        pref_tags = list(pref.get("preferred_tags") or []) or _PARTY_PREFERRED.get(party, ["outdoor"])
         derived: list[str] = []
 
         budget = pref.get("daily_budget_tier") or 0
@@ -201,18 +237,16 @@ def run(dry_run: bool = False) -> None:
                 pref_tags.append(tag)
                 seen.add(tag)
 
-        like_tags = pref_tags
+        like_tags   = pref_tags
         unlike_tags = _PARTY_AVERSION.get(party, ["nightlife"])
 
         pool = group_pools.get(party, sorted_places)[:]
-        # shared prefix (liked by whole group) + personal tail
-        shared = pool[:shared_pool_size]
+        shared   = pool[:shared_pool_size]
         personal = pool[shared_pool_size:]
         random.shuffle(personal)
         ordered = shared + personal
 
-        likes = 0
-        unlikes = 0
+        likes = unlikes = 0
 
         for pid in ordered:
             if likes >= LIKES_PER_USER and unlikes >= UNLIKES_PER_USER:
@@ -248,7 +282,7 @@ def run(dry_run: bool = False) -> None:
     )
     logger.info(
         "CF will activate: %s  (need %d users, have %d)",
-        "GOOD TO GO" if n_users >= 20 else "NO, increase LIKES_PER_USER or add more preferences",
+        "GOOD TO GO" if n_users >= 20 else "NO — increase LIKES_PER_USER or add more preferences",
         20, n_users,
     )
 
@@ -260,26 +294,30 @@ def run(dry_run: bool = False) -> None:
         logger.info("Nothing to insert.")
         return
 
-    if not dry_run:
-        _ensure_stub_users(sb, pref_user_ids, existing_users)
+    # ── ensure user-table rows exist before inserting interactions (FK guard) ──
+    existing_users = _ensure_stub_users(sb, pref_user_ids, existing_users)
 
+    # ── insert interactions ───────────────────────────────────────────────────
     PAGE = 500
     for i in range(0, len(rows_to_insert), PAGE):
         batch = rows_to_insert[i: i + PAGE]
         sb.table(TABLE).insert(batch).execute()
-        logger.info("  inserted rows %d-%d", i + 1, i + len(batch))
+        logger.info("  inserted rows %d–%d", i + 1, i + len(batch))
 
     logger.info("Done. %d interactions written.", len(rows_to_insert))
+
+    # ── UUID consistency check ────────────────────────────────────────────────
+    logger.info("Running UUID consistency check across preference / user / user_interactions…")
+    _verify_uuid_consistency(sb, pref_user_ids)
+
     logger.info("Trigger /admin/retrain on the ML service to apply immediately.")
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Simulate user interactions.")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Plan without writing to DB.")
+    parser = argparse.ArgumentParser(description="Simulate user interactions.")
+    parser.add_argument("--dry-run", action="store_true", help="Plan without writing to DB.")
     args = parser.parse_args()
 
     run(dry_run=args.dry_run)

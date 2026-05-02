@@ -47,6 +47,7 @@ class PlaceRecordSchema(BaseModel):
     street:       Optional[str] = None
     suburb:       Optional[str] = None
     district:     Optional[str] = None
+    address:      Optional[str] = None   # pre-formatted full address, ready to display
     categories:   list[str] = []
     price_level:  Optional[int] = None
     rating:       Optional[float] = None

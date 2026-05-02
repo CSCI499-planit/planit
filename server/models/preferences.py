@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+
 
 class preferenceModel(BaseModel):
     use_case: str
@@ -15,10 +15,6 @@ class preferenceModel(BaseModel):
     max_travel_minutes: str
     itinerary_pace: str
 
+
 class preferenceInput(preferenceModel):
     pass
-
-class preferenceOutput(preferenceModel):
-    id:str
-    user_id:str
-    created_at:datetime

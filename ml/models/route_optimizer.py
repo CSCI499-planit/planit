@@ -186,8 +186,8 @@ def _nearest_neighbor_order(
         last = ordered[-1]
         travel_times = [
             _travel_minutes(
-                last["latitude"], last["longitude"],
-                remaining[i]["latitude"], remaining[i]["longitude"],
+                last.get("latitude", 0.0), last.get("longitude", 0.0),
+                remaining[i].get("latitude", 0.0), remaining[i].get("longitude", 0.0),
                 mode,
             )
             for i in range(len(remaining))
@@ -225,13 +225,13 @@ def _build_day(
         if i < len(places) - 1:
             nxt = places[i + 1]
             t_min = _travel_minutes(
-                place["latitude"], place["longitude"],
-                nxt["latitude"],   nxt["longitude"],
+                place.get("latitude", 0.0), place.get("longitude", 0.0),
+                nxt.get("latitude", 0.0),   nxt.get("longitude", 0.0),
                 mode,
             )
             dist_m = round(_haversine_km(
-                place["latitude"], place["longitude"],
-                nxt["latitude"],   nxt["longitude"],
+                place.get("latitude", 0.0), place.get("longitude", 0.0),
+                nxt.get("latitude", 0.0),   nxt.get("longitude", 0.0),
             ) * 1000)
             travel_to_next = {"mode": mode,
                               "minutes": t_min, "distance_m": dist_m}
@@ -273,8 +273,8 @@ def _build_greedy_day(
             continue
         travel = (
             _travel_minutes(
-                prev["latitude"], prev["longitude"],
-                place["latitude"], place["longitude"],
+                prev.get("latitude", 0.0), prev.get("longitude", 0.0),
+                place.get("latitude", 0.0), place.get("longitude", 0.0),
                 mode,
             )
             if prev else 0

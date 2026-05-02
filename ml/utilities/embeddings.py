@@ -12,5 +12,3 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     if norm_a < 1e-9 or norm_b < 1e-9:
         return 0.0
     return float(np.dot(a, b) / (norm_a * norm_b))
-
-

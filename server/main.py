@@ -22,6 +22,8 @@ app = FastAPI()
 
 origins = [
     'http://localhost:3000',
+    'http://localhost:5173',   # Vite dev server
+    'null',                    # file:// POC opened directly in browser
     f'https://{PRODUCTION_URL}'
 ]
 

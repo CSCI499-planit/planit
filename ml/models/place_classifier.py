@@ -193,5 +193,3 @@ def rule_based_labels(place: PlaceRecord) -> dict[str, int]:
         labels["quick_visit"] = 1
 
     return labels
-
-

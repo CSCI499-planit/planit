@@ -12,10 +12,7 @@ services:
       - key: PRODUCTION_URL
         sync: false
       - key: ML_SERVICE_URL
-        fromService:
-          name: planit-ml
-          type: web
-          property: host
+        sync: false
 
   - type: web
     name: planit-ml
@@ -26,6 +23,8 @@ services:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
         sync: false
       - key: GEOAPIFY_KEY
         sync: false

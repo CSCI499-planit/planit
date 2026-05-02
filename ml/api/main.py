@@ -32,10 +32,15 @@ _STORAGE_BUCKET   = os.getenv("ARTIFACT_BUCKET", "ml-artifacts")
 _STORAGE_ARTIFACT = "user_profiler.joblib"
 
 
+def _sb_service_client():
+    from supabase import create_client
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY", "")
+    return create_client(os.getenv("SUPABASE_URL", ""), key)
+
+
 def _download_artifact(local_path: str) -> bool:
     try:
-        from supabase import create_client
-        sb   = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+        sb   = _sb_service_client()
         data = sb.storage.from_(_STORAGE_BUCKET).download(_STORAGE_ARTIFACT)
         from pathlib import Path
         Path(local_path).parent.mkdir(parents=True, exist_ok=True)
@@ -49,9 +54,8 @@ def _download_artifact(local_path: str) -> bool:
 
 def _upload_artifact(local_path: str) -> None:
     try:
-        from supabase import create_client
         from pathlib import Path
-        sb   = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+        sb   = _sb_service_client()
         data = Path(local_path).read_bytes()
         sb.storage.from_(_STORAGE_BUCKET).upload(
             _STORAGE_ARTIFACT, data,
@@ -169,8 +173,7 @@ def _paginate_table(sb, table: str, page_size: int = 1000) -> list[dict]:
 
 
 def _count_interactions_since(since: datetime | None) -> int:
-    from supabase import create_client
-    sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+    sb = _sb_service_client()
     q = sb.table("user_interactions").select("id", count="exact")  # type: ignore[call-overload]
     if since:
         q = q.gte("created_at", since.isoformat())
@@ -201,9 +204,8 @@ async def _do_retrain() -> None:
 def _fetch_and_train(pipeline: MLPipeline) -> MLPipeline:
     # pulls latest data from Supabase and retrains stage 2 in-place
     from ml.models.user_profiler import MIN_SVD_USERS, parse_app_interactions
-    from supabase import create_client
 
-    sb = create_client(os.getenv("SUPABASE_URL", ""), os.getenv("SUPABASE_KEY", ""))
+    sb = _sb_service_client()
 
     raw_prefs    = _paginate_table(sb, "preference")
     interactions = _paginate_table(sb, "user_interactions")

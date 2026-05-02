@@ -42,7 +42,8 @@ def fetch_osm_features(lat: float, lon: float, radius_m: int = 5000) -> list[dic
         resp = httpx.post(
             OVERPASS_URL,
             data={"data": _QUERY.format(lat=lat, lon=lon, r=radius_m)},
-            timeout=35.0,
+            headers={"User-Agent": "PlanIt/1.0 (travel-recommendation-app; contact@planit.app)"},
+            timeout=60.0,
         )
         resp.raise_for_status()
         elements = resp.json().get("elements", [])

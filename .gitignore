@@ -17,15 +17,16 @@ data/review*
 data/AhmedTakeout/
 
 # generated artifacts and evaluation outputs
+artifacts/*.joblib
 artifacts/*.md
 artifacts/*.csv
 artifacts/*.txt
 artifacts/*.png
 ml/eval_*.py
 
-# demo script outputs
-demo/artifacts/
-
 # local dev scripts
 ml/data/interactive_feedback.py
 ml/data/validate_system.py
+docs/ml_integration.md
+demo/run_demo.py
+migrate_auth.py

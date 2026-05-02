@@ -60,7 +60,7 @@ def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
     resp.raise_for_status()
     results = []
     for feat in resp.json().get("features", []):
-        props  = feat.get("properties", {})
+        props = feat.get("properties", {})
         coords = feat.get("geometry", {}).get("coordinates", [])
         if len(coords) < 2:
             continue
@@ -88,7 +88,7 @@ def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) 
         f"&limit={limit}"
         f"&apiKey={_api_key()}"
     )
-    resp = httpx.get(url, timeout=15.0)
+    resp = httpx.get(url, timeout=30.0)
     resp.raise_for_status()
     return parse_geoapify_response(resp.json())
 
@@ -104,8 +104,10 @@ def fetch_places_enriched(lat: float, lon: float, radius_m: int = 5000, limit: i
     from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        geo_future = pool.submit(fetch_places, lat, lon, radius_m=radius_m, limit=limit)
-        osm_future = pool.submit(fetch_osm_features, lat, lon, radius_m=radius_m)
+        geo_future = pool.submit(
+            fetch_places, lat, lon, radius_m=radius_m, limit=limit)
+        osm_future = pool.submit(
+            fetch_osm_features, lat, lon, radius_m=radius_m)
 
         places = geo_future.result()
         try:
@@ -118,15 +120,10 @@ def fetch_places_enriched(lat: float, lon: float, radius_m: int = 5000, limit: i
 
 
 def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
-    from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
     lat, lon = geocode_location(location)
     logger.info("Geocoded %r → (%.4f, %.4f)", location, lat, lon)
-    places = fetch_places(lat, lon, radius_m=radius_m, limit=limit)
-    osm_features = fetch_osm_features(lat, lon, radius_m=radius_m)
-    places = enrich_places_with_osm(places, osm_features)
-    places = _deduplicate_by_name(places)
-    logger.info("Fetched %d places for %r (after dedup)",
-                len(places), location)
+    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit)
+    logger.info("Fetched %d places for %r (after dedup)", len(places), location)
     return places
 
 
@@ -156,7 +153,7 @@ def _deduplicate_by_name(places: list[PlaceRecord]) -> list[PlaceRecord]:
 
 
 def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
-    # returns None if the feature is missing a name or coordinates — skip those
+    # returns None if the feature is missing a name or coordinates
     props = feature.get("properties", {})
     geom = feature.get("geometry", {})
 
@@ -192,6 +189,16 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
     if props.get("fee"):
         attrs["HasFee"] = props["fee"]
 
+    # Build a display-ready address from Geoapify's pre-formatted string.
+    # Falls back to manual concatenation when formatted is absent.
+    address: str | None = props.get("formatted") or None
+    if not address:
+        parts = filter(None, [
+            props.get("street"), props.get("city"),
+            props.get("postcode"), props.get("country"),
+        ])
+        address = ", ".join(parts) or None
+
     return {
         "place_id":      props.get("place_id", ""),
         "name":          name,
@@ -205,6 +212,7 @@ def parse_geoapify_feature(feature: dict[str, Any]) -> PlaceRecord | None:
         "street":        props.get("street"),
         "suburb":        props.get("suburb"),
         "district":      props.get("district"),
+        "address":       address,
         "categories":    categories,
         "hours":         props.get("opening_hours"),
         "attributes":    attrs if attrs else None,
