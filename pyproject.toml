@@ -23,6 +23,7 @@ dependencies = [
     # HTTP
     "requests>=2.31",
     "httpx>=0.27",
+    "python-multipart>=0.0.9",
 
     # database
     "supabase>=2.0",

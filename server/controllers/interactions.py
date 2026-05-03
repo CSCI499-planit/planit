@@ -11,6 +11,7 @@ EVENT_RATINGS: dict[str, float] = {
     "unlike":            1.0,
     "itinerary_like":    5.0,
     "itinerary_dislike": 1.0,
+    "google_import":     3.0,  # fallback; actual rating stored in metadata.rating
 }
 
 INTERACTIONS_TABLE = 'user_interactions'
