@@ -1,0 +1,94 @@
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  height: 56px;
+  background: #111;
+  color: var(--color-white);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav__logo {
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+  color: var(--color-white);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.nav__logo:hover {
+  opacity: 0.8;
+}
+
+.nav__links {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.nav__links a,
+.nav__links button {
+  background: none;
+  border: none;
+  color: #aaa;
+  font-family: inherit;
+  font-size: 0.90rem;
+  cursor: pointer;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.nav__links a:hover,
+.nav__links a.active,
+.nav__links button:hover,
+.nav__links button.active {
+  background: rgba(255,255,255,0.1);
+  color: var(--color-white);
+}
+
+.nav__right {
+  display: flex;
+  gap: var(--spacing-sm);
+  color: #aaa
+}
+
+
+.nav__icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  border-radius: 6px;
+}
+
+.nav svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.nav__icon svg {
+  color: #aaa;
+  transition: color 0.2s;
+}
+
+.nav__icon:hover svg {
+  color: white;
+}
+
