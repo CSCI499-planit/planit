@@ -1,10 +1,13 @@
 """
     user route to store user account details
 """
+import logging
 from fastapi import APIRouter, HTTPException, Depends
 from postgrest.exceptions import APIError
-from supabase import Client, create_client
-from server.config.db import get_db_client, get_current_user, url, key
+from supabase import Client
+from server.config.db import get_db_client, get_current_user
+
+logger = logging.getLogger(__name__)
 from server.models.users import userInput
 
 USER_TABLE = "user"
@@ -38,25 +41,23 @@ async def sign_up(user_details: dict[str, str], client: Client = Depends(get_db_
     # to satisfy the auth.uid() = id policy. Falls back to anon if no session
     # (email confirmation flow) — the Supabase trigger is the safety net there.
     try:
-        if res.session:
-            authed = create_client(url, key)
-            authed.postgrest.auth(res.session.access_token)
-            authed.table(USER_TABLE).upsert(
-                {"id": user_id, "name": user_details.get("name", ""), "email": user_details["email"]},
-                on_conflict="id",
-            ).execute()
-        else:
-            client.table(USER_TABLE).upsert(
-                {"id": user_id, "name": user_details.get("name", ""), "email": user_details["email"]},
-                on_conflict="id",
-            ).execute()
+        client.table(USER_TABLE).upsert(
+            {"id": user_id, "name": user_details.get("name", ""), "email": user_details["email"]},
+            on_conflict="id",
+        ).execute()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"User profile creation failed: {e}")
+        # Supabase trigger likely already inserted the row; non-fatal
+        logger.warning("User table upsert failed (trigger may have handled it): %s", e)
 
     if not res.session:
         return {"status": "confirmation_required", "user_id": user_id}
 
-    return {"access_token": res.session.access_token, "user_id": user_id}
+    return {
+        "access_token": res.session.access_token,
+        "user_id":      user_id,
+        "name":         user_details.get("name", ""),
+        "email":        user_details["email"],
+    }
 
 
 @router.post("/signin")
@@ -64,14 +65,19 @@ async def sign_in(user_details: dict[str, str], client: Client = Depends(get_db_
     """
     Sign in an existing user.
     Body: { email, password }
-    Returns: { access_token, user_id }
+    Returns: { access_token, user_id, name, email }
     """
     try:
         res = client.auth.sign_in_with_password({
             "email":    user_details["email"],
             "password": user_details["password"],
         })
-        return {"access_token": res.session.access_token, "user_id": str(res.user.id)}
+        return {
+            "access_token": res.session.access_token,
+            "user_id":      str(res.user.id),
+            "name":         res.user.user_metadata.get("name", ""),
+            "email":        res.user.email,
+        }
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
 

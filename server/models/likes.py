@@ -2,7 +2,7 @@ from pydantic import BaseModel
 
 
 class ratingsModel(BaseModel):
-    rating: str
+    rating: float
     place_id: str
 
 

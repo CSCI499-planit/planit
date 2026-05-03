@@ -68,11 +68,6 @@ def _fetch_user_preference(user_id: str, client: Client) -> dict:
             detail="User preference not found. Please complete the onboarding survey first.",
         )
     pref = rows[0]
-
-    # DB column is 'cuisines_preferences'; ML field is 'cuisine_preferences' (no trailing s)
-    if "cuisines_preferences" in pref and "cuisine_preferences" not in pref:
-        pref["cuisine_preferences"] = pref.pop("cuisines_preferences")
-
     pref["user_id"] = user_id
     return pref
 
@@ -113,7 +108,10 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
     for row in interactions:
         pid   = row["place_id"]
         event = row.get("event_type", "")
-        r     = EVENT_RATINGS.get(event, 2.5)
+        if event == "google_import":
+            r = float((row.get("metadata") or {}).get("rating", 3.0))
+        else:
+            r = EVENT_RATINGS.get(event, 2.5)
         if pid not in agg:
             agg[pid] = {"ratings": [], "visit_count": 0, "created_at": row.get("created_at")}
         agg[pid]["ratings"].append(r)

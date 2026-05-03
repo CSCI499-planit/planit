@@ -3,11 +3,10 @@ import { useNavigate, Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 
-export default function SignupPage() {
+export default function SigninPage() {
   const navigate = useNavigate()
   const { login } = useAuth()
 
-  const [name, setName]         = useState('')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
@@ -19,17 +18,11 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      const data = await api.post('/user/signup', { name, email, password })
-
-      if (data.status === 'confirmation_required') {
-        setError('Check your email to confirm your account before signing in.')
-        return
-      }
-
+      const data = await api.post('/user/signin', { email, password })
       login(data)
-      navigate('/survey')
+      navigate('/app/home')
     } catch (err) {
-      setError(err.message ?? 'Signup failed. Please try again.')
+      setError(err.message ?? 'Sign in failed. Check your email and password.')
     } finally {
       setLoading(false)
     }
@@ -39,23 +32,11 @@ export default function SignupPage() {
     <div className="signup-page">
       <div className="signup-container">
         <div className="signup-header">
-          <h1>Create Your PlanIt Account</h1>
-          <p>Get started planning your next adventure</p>
+          <h1>Welcome Back</h1>
+          <p>Sign in to continue planning</p>
         </div>
 
         <form onSubmit={handleSubmit} className="signup-form">
-          <div className="form-group">
-            <label htmlFor="name">Full Name</label>
-            <input
-              id="name"
-              type="text"
-              placeholder="Jane Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
           <div className="form-group">
             <label htmlFor="email">Email</label>
             <input
@@ -83,12 +64,12 @@ export default function SignupPage() {
           {error && <p className="form-error">{error}</p>}
 
           <button type="submit" className="btn btn--primary signup-btn" disabled={loading}>
-            {loading ? 'Creating account…' : 'Create Account'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
         <p className="signup-footer">
-          Already have an account? <Link to="/signin">Sign in</Link>
+          Don't have an account? <Link to="/signup">Sign up</Link>
         </p>
       </div>
     </div>

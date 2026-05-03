@@ -22,14 +22,10 @@ router = APIRouter(prefix="/preference", tags=["preference"])
 
 def _ml_embed(preference: dict) -> dict | None:
     """Fire-and-forget embed call to ML. Returns result or None if ML is unavailable."""
-    ml_pref = {**preference}
-    # DB column is 'cuisines_preferences'; ML expects 'cuisine_preferences'
-    if "cuisines_preferences" in ml_pref:
-        ml_pref["cuisine_preferences"] = ml_pref.pop("cuisines_preferences")
     try:
         res = httpx.post(
             f"{ML_SERVICE_URL}/profile/embed",
-            json={"preference": ml_pref, "visits": None},
+            json={"preference": preference, "visits": None},
             timeout=15.0,
         )
         res.raise_for_status()

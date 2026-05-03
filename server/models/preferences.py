@@ -9,7 +9,7 @@ class preferenceModel(BaseModel):
     preferred_tags: list[str]
     exploration_score: int
     popularity_weight: int
-    cuisines_preferences: list[str]
+    cuisine_preferences: list[str]
     dietary_restrictions: list[str]
     travel_mode: list[str]
     max_travel_minutes: str

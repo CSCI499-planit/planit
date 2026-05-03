@@ -30,3 +30,4 @@ ml/data/validate_system.py
 docs/ml_integration.md
 demo/run_demo.py
 migrate_auth.py
+INTEGRATION_CHECKLIST.md
