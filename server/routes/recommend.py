@@ -81,14 +81,6 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
         .execute()
         .data or []
     )
-    ratings = (
-        client.table("rating")
-        .select("place_id, rating, created_at")
-        .eq("user_id", user_id)
-        .execute()
-        .data or []
-    )
-
     # also exclude every place previously shown in recommendation_logs —
     # so repeated requests for the same location always surface new places
     shown = (
@@ -128,24 +120,6 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
         }
         for pid, v in agg.items()
     ]
-
-    rating_map = {row["place_id"]: row for row in ratings}
-    seen_pids  = {v["place_id"] for v in visits}
-    for pid, row in rating_map.items():
-        if pid in seen_pids:
-            for v in visits:
-                if v["place_id"] == pid:
-                    v["rating"] = float(row["rating"])
-                    break
-        else:
-            visits.append({
-                "user_id":     user_id,
-                "place_id":    pid,
-                "rating":      float(row["rating"]),
-                "visit_count": 1,
-                "tags":        [],
-                "created_at":  row.get("created_at"),
-            })
 
     return visits, excluded
 
