@@ -41,8 +41,9 @@ html, body, #root {
 
 body {
   font-family: "DM Sans", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background: var(--color-bg);
-  color: var(--color-text-dark);
+  /* NOTE: delete later - Commented Out To Use Tailwind */
+  /* background: var(--color-bg);
+  color: var(--color-text-dark); */
   line-height: 1.5;
 
   -webkit-font-smoothing: antialiased;
