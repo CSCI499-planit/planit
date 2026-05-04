@@ -17,6 +17,7 @@ export default function UploadPage() {
 
   const [files, setFiles] = useState([]);
   const [error, setError] = useState("");
+  const [showGuide, setShowGuide] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -120,7 +121,23 @@ export default function UploadPage() {
               <li>
                 Select only <strong>Maps (your places)</strong>
               </li>
-              <li>Create export, download the ZIP, and extract it</li>
+              <li>
+                Create export, download the ZIP, and extract it{" "}
+                <button
+                  type="button"
+                  className="guide-toggle"
+                  onClick={() => setShowGuide(v => !v)}
+                >
+                  {showGuide ? "Hide" : "Show me"}
+                </button>
+                {showGuide && (
+                  <img
+                    src="/takeout-guide.png"
+                    alt="Maps (your places) selected in Google Takeout"
+                    className="guide-img"
+                  />
+                )}
+              </li>
               <li>
                 From the extracted folder, upload: <strong>Reviews.json</strong>{" "}
                 and <strong>Saved Places.json</strong> (multiselect)
