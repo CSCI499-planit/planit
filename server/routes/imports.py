@@ -119,6 +119,6 @@ async def import_google_takeout(
         _bulk_insert(client, rows)
     except Exception as e:
         logger.error("Google Takeout import failed for user %s: %s", user_id, e)
-        raise HTTPException(status_code=500, detail="Failed to save import data.")
+        raise HTTPException(status_code=500, detail=f"Failed to save import data: {e}")
 
     return {"imported": len(rows), "sources": source_counts}
