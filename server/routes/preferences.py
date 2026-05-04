@@ -15,7 +15,7 @@ from server.models.preferences import preferenceInput
 logger = logging.getLogger(__name__)
 
 PREFERENCE_TABLE = 'preference'
-ML_SERVICE_URL   = os.getenv("ML_SERVICE_URL", "http://localhost:8001")
+ML_SERVICE_URL   = os.getenv("ML_SERVICE_URL", "http://localhost:8001").rstrip("/")
 
 router = APIRouter(prefix="/preference", tags=["preference"])
 

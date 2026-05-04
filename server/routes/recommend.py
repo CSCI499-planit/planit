@@ -19,7 +19,7 @@ from server.controllers.interactions import EVENT_RATINGS
 
 router = APIRouter(prefix="/recommend", tags=["recommend"])
 
-ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://localhost:8001")
+ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://localhost:8001").rstrip("/")
 
 
 # ---------------------------------------------------------------------------
