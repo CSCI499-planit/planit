@@ -94,10 +94,12 @@ export default function SurveyPage() {
       max_travel_minutes: answers.max_travel_minutes.replace(" min", ""),
     };
 
-    localStorage.setItem("userPreferences", JSON.stringify(normalized));
+    const { maps_history, ...payload } = normalized;
+
+    localStorage.setItem("userPreferences", JSON.stringify(payload));
 
     try {
-      await api.post("/preference", normalized);
+      await api.post("/preference/", payload);
     } catch (err) {
       console.error("Failed to save preferences to backend:", err.message);
     }

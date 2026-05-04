@@ -18,8 +18,6 @@ export default function SignupPage() {
     setError('')
     setLoading(true)
 
-    // original signup (backend / Supabase / API)
-    /*
     try {
       const data = await api.post('/user/signup', { name, email, password })
 
@@ -35,18 +33,6 @@ export default function SignupPage() {
     } finally {
       setLoading(false)
     }
-    */
-
-    // mock signup (NO backend needed)
-    setTimeout(() => {
-      if (email && password && name) {
-        login({ email, name })
-        navigate('/survey')
-      } else {
-        setError('Please fill out all fields')
-      }
-      setLoading(false)
-    }, 500)
   }
 
   return (
