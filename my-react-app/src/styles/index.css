@@ -2,10 +2,6 @@
   --color-primary: #141414;
   --color-secondary: #6a93b5;
 
-  --color-text-dark: #0d0d0d;
-  --color-text-light: #4a4a4a;
-  --color-text-muted: #888;
-
   --color-bg: #f5f7fa;
   --color-white: #ffffff;
   --color-border: rgba(0, 0, 0, 0.07);
@@ -41,22 +37,10 @@ html, body, #root {
 
 body {
   font-family: "DM Sans", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  /* NOTE: delete later - Commented Out To Use Tailwind */
-  /* background: var(--color-bg);
-  color: var(--color-text-dark); */
   line-height: 1.5;
 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-h1, h2, h3, h4 {
-  font-weight: 600;
-  color: var(--color-text-dark);
-}
-
-p {
-  color: var(--color-text-light);
 }
 
 button {

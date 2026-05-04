@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 import "../components/survey.css";
 
 export default function SurveyPage() {
@@ -69,7 +70,7 @@ export default function SurveyPage() {
     "Dairy-free": "dairy_free",
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     const mappedMode = TRAVEL_MODE_MAP[answers.travel_mode];
@@ -94,7 +95,18 @@ export default function SurveyPage() {
     };
 
     localStorage.setItem("userPreferences", JSON.stringify(normalized));
-    navigate("/app/destination");
+
+    try {
+      await api.post("/preference", normalized);
+    } catch (err) {
+      console.error("Failed to save preferences to backend:", err.message);
+    }
+
+    if (answers.maps_history === "yes") {
+      navigate("/upload");
+    } else {
+      navigate("/app/home");
+    }
   };
 
   const interests = [

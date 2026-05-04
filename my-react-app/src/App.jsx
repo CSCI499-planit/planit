@@ -7,10 +7,12 @@ import LandingPage    from './pages/landing'
 import SignupPage     from './pages/signup'
 import SigninPage     from './pages/signin'
 import SurveyPage     from './pages/survey'
+import UploadPage     from './pages/upload'
 import Navbar         from './pages/navbar'
 import HomePage       from './pages/home'
 import ProfilePage    from './pages/profile'
 import DestinationPage from './pages/destination'
+import GeneratePage   from './pages/generate'
 
 export const DarkModeContext = React.createContext()
 
@@ -43,12 +45,14 @@ export default function App() {
         {/* survey is protected — user must be signed up before submitting preferences */}
         <Route element={<ProtectedRoute />}>
           <Route path="/survey" element={<SurveyPage />} />
+          <Route path="/upload" element={<UploadPage />} />
         </Route>
 
         <Route element={<ProtectedRoute />}>
           <Route path="/app" element={<AppLayout />}>
             <Route index        element={<HomePage />} />
             <Route path="home"  element={<HomePage />} />
+            <Route path="generate" element={<GeneratePage />} />
             <Route path="destination" element={<DestinationPage />} />
             <Route path="profile"     element={<ProfilePage />} />
           </Route>

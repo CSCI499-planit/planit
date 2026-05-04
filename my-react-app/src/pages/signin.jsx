@@ -17,6 +17,8 @@ export default function SigninPage() {
     setError('')
     setLoading(true)
 
+    // original login
+    /*
     try {
       const data = await api.post('/user/signin', { email, password })
       login(data)
@@ -26,6 +28,18 @@ export default function SigninPage() {
     } finally {
       setLoading(false)
     }
+    */
+
+    // mock login
+    setTimeout(() => {
+      if (email === "test@test.com" && password === "1234") {
+        login({ email })
+        navigate('/app/home')
+      } else {
+        setError("Invalid credentials (try test@test.com / 1234)")
+      }
+      setLoading(false)
+    }, 500)
   }
 
   return (
@@ -63,7 +77,11 @@ export default function SigninPage() {
 
           {error && <p className="form-error">{error}</p>}
 
-          <button type="submit" className="btn btn--primary signup-btn" disabled={loading}>
+          <button
+            type="submit"
+            className="btn btn--primary signup-btn"
+            disabled={loading}
+          >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
