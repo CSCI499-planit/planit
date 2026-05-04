@@ -51,7 +51,7 @@ export default function GeneratePage() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="trip_days">Trip Duration (days)</label>
+            <label htmlFor="trip_days">Trip Duration (days) *</label>
             <input
               id="trip_days"
               type="number"

@@ -68,13 +68,34 @@ export default function DestinationPage() {
   }
 
   const filtered = destinations
-    .filter(d =>
-      d.name.toLowerCase().includes(search.toLowerCase()) ||
-      d.country.toLowerCase().includes(search.toLowerCase()) ||
-      d.tags.some(t => t.includes(search.toLowerCase()))
-    )
-    .map(d => ({ ...d, score: score(d) }))
-    .sort((a, b) => b.score - a.score)
+  .filter(d =>
+    d.name.toLowerCase().includes(search.toLowerCase()) ||
+    d.country.toLowerCase().includes(search.toLowerCase()) ||
+    d.tags.some(t => t.includes(search.toLowerCase()))
+  )
+
+  .filter(d => {
+    if (!user) return true
+
+    const matchesTags =
+      user.preferred_tags?.some(tag => d.tags.includes(tag))
+
+    const matchesBudget =
+      d.priceLevel <= Number(user.daily_budget_tier)
+
+    const matchesParty =
+      !user.party_type ||
+      d.audience?.includes(user.party_type)
+
+    return matchesTags || matchesBudget || matchesParty
+  })
+
+  .map(d => ({
+    ...d,
+    score: score(d)
+  }))
+
+  .sort((a, b) => b.score - a.score)
 
   return (
     <div className="dest-page">

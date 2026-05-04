@@ -41,8 +41,7 @@ export default function App() {
         <Route path="/"       element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signin" element={<SigninPage />} />
-
-        {/* survey is protected — user must be signed up before submitting preferences */}
+        
         <Route element={<ProtectedRoute />}>
           <Route path="/survey" element={<SurveyPage />} />
           <Route path="/upload" element={<UploadPage />} />
