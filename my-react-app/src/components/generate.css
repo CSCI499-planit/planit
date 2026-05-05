@@ -100,6 +100,28 @@ fieldset legend {
   font-style: italic;
 }
 
+.generate-result {
+  margin-top: 2rem;
+}
+
+.generate-result h2 {
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  color: var(--text-primary);
+}
+
+.json-output {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 1.5rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre;
+  font-family: monospace;
+}
+
 @media (max-width: 640px) {
   .form-row {
     grid-template-columns: 1fr;

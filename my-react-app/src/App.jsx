@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom'
 import './styles/index.css'
 
@@ -34,9 +34,18 @@ function AppLayout() {
   )
 }
 
+function WakeServices() {
+  useEffect(() => {
+    fetch(import.meta.env.VITE_API_BASE_URL + '/user/signin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {})
+    fetch(import.meta.env.VITE_ML_SERVICE_URL).catch(() => {})
+  }, [])
+  return null
+}
+
 export default function App() {
   return (
     <AuthProvider>
+      <WakeServices />
       <Routes>
         <Route path="/"       element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />

@@ -68,6 +68,15 @@ export default function GeneratePage() {
             {loading ? 'Generating...' : 'Generate Itinerary'}
           </button>
         </form>
+
+        {itinerary && (
+          <div className="generate-result">
+            <h2>Itinerary JSON</h2>
+            <pre className="json-output">
+              {JSON.stringify(itinerary, null, 2)}
+            </pre>
+          </div>
+        )}
       </div>
     </div>
   )
