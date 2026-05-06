@@ -73,6 +73,58 @@
   background: #fff;
 }
 
+.itinerary-map {
+  width: 100%;
+  height: 420px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 2rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+}
+
+.day-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  color: #475569;
+}
+
+.feedback-btn:disabled:not(.active) {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.feedback-btn--like:hover:not(:disabled),
+.feedback-btn--like.active {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.feedback-btn--dislike:hover:not(:disabled),
+.feedback-btn--dislike.active {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
 .itinerary-result {
   margin-top: 0.5rem;
   animation: fadeUp 0.4s ease both;
@@ -172,8 +224,8 @@
 .day-card__date {
   font-size: 0.78rem;
   color: #94a3b8;
-  margin-left: auto;
 }
+
 
 .stops-timeline {
   position: relative;

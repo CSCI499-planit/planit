@@ -192,13 +192,24 @@
   margin-bottom: 0.75rem;
 }
 
+.saved-detail-day__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
 .saved-detail-day__label {
   font-size: 0.78rem;
   font-weight: 700;
   color: #0f172a;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 0.35rem;
+}
+
+.saved-detail-day__header .gmaps-btn {
+  font-size: 0.72rem;
+  padding: 0.2rem 0.65rem;
 }
 
 .saved-detail-stop {

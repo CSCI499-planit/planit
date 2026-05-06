@@ -5,6 +5,18 @@ import { userStorage } from '../utils/userStorage'
 import ConfirmDialog from '../components/confirmdialog'
 import '../components/home.css'
 
+function openInGoogleMaps(stops) {
+  const coords = stops
+    .filter(s => s.place?.latitude && s.place?.longitude)
+    .map(s => `${s.place.latitude},${s.place.longitude}`)
+  if (coords.length === 0) return
+  const origin = coords[0]
+  const destination = coords[coords.length - 1]
+  const waypoints = coords.slice(1, -1).slice(0, 8).join('|')
+  const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&travelmode=driving`
+  window.open(url, '_blank')
+}
+
 function SavedItineraryCard({ entry, onDelete }) {
   const [expanded, setExpanded] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -37,7 +49,12 @@ function SavedItineraryCard({ entry, onDelete }) {
         <div className="saved-card__detail">
           {entry.itinerary?.map(day => (
             <div key={day.day} className="saved-detail-day">
-              <div className="saved-detail-day__label">Day {day.day}{day.date ? ` · ${day.date}` : ''}</div>
+              <div className="saved-detail-day__header">
+                <div className="saved-detail-day__label">Day {day.day}{day.date ? ` · ${day.date}` : ''}</div>
+                <button className="gmaps-btn" onClick={() => openInGoogleMaps(day.stops)}>
+                  Open in Google Maps
+                </button>
+              </div>
               {day.stops.map((s, i) => (
                 <div key={i} className="saved-detail-stop">
                   {s.place?.name}

@@ -33,6 +33,16 @@ FETCH_CATEGORIES = [
 
 def geocode_location(location: str) -> tuple[float, float]:
     # accepts cities, neighbourhoods, hotel names, landmarks, addresses
+    geo = _geocode_full(location)
+    return geo["lat"], geo["lon"]
+
+
+def _geocode_full(location: str) -> dict:
+    """Geocode and return lat, lon, and bbox (if available).
+
+    bbox is [west, south, east, north] (min_lon, min_lat, max_lon, max_lat).
+    Returns {"lat": float, "lon": float, "bbox": list[float] | None}.
+    """
     resp = httpx.get(
         "https://api.geoapify.com/v1/geocode/search",
         params={"text": location, "limit": 1, "apiKey": _api_key()},
@@ -42,8 +52,22 @@ def geocode_location(location: str) -> tuple[float, float]:
     features = resp.json().get("features", [])
     if not features:
         raise ValueError(f"Location not found: {location!r}")
-    coords = features[0]["geometry"]["coordinates"]
-    return float(coords[1]), float(coords[0])  # lat, lon
+
+    feat = features[0]
+    coords = feat["geometry"]["coordinates"]
+    lat, lon = float(coords[1]), float(coords[0])
+
+    # Geoapify returns bbox in properties.bbox as {lon1, lat1, lon2, lat2}
+    # Fall back to GeoJSON top-level bbox array if present
+    bbox = None
+    props = feat.get("properties", {})
+    raw = props.get("bbox")
+    if isinstance(raw, dict) and all(k in raw for k in ("lon1", "lat1", "lon2", "lat2")):
+        bbox = [raw["lon1"], raw["lat1"], raw["lon2"], raw["lat2"]]
+    elif isinstance(feat.get("bbox"), list) and len(feat["bbox"]) == 4:
+        bbox = feat["bbox"]
+
+    return {"lat": lat, "lon": lon, "bbox": bbox}
 
 
 def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
@@ -80,11 +104,23 @@ def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
     return results
 
 
-def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
+def fetch_places(
+    lat: float,
+    lon: float,
+    radius_m: int = 5000,
+    limit: int = 50,
+    bbox: list[float] | None = None,
+) -> list[PlaceRecord]:
+    # Prefer bbox rect filter (exact place boundary) over circle when available
+    if bbox:
+        geo_filter = f"rect:{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
+    else:
+        geo_filter = f"circle:{lon},{lat},{radius_m}"
+
     url = (
         f"https://api.geoapify.com/v2/places"
         f"?categories={','.join(FETCH_CATEGORIES)}"
-        f"&filter=circle:{lon},{lat},{radius_m}"
+        f"&filter={geo_filter}"
         f"&limit={limit}"
         f"&apiKey={_api_key()}"
     )
@@ -93,21 +129,20 @@ def fetch_places(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) 
     return parse_geoapify_response(resp.json())
 
 
-def fetch_places_enriched(lat: float, lon: float, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
-    """Like fetch_places() but runs OSM enrichment in parallel for better tagging.
-
-    Use this when you have coordinates and want richer attributes
-    (historic, viewpoint, garden, natural features) without the extra
-    round-trip latency of sequential requests.
-    """
+def fetch_places_enriched(
+    lat: float,
+    lon: float,
+    radius_m: int = 5000,
+    limit: int = 50,
+    bbox: list[float] | None = None,
+) -> list[PlaceRecord]:
+    """Like fetch_places() but runs OSM enrichment in parallel for better tagging."""
     from concurrent.futures import ThreadPoolExecutor
     from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        geo_future = pool.submit(
-            fetch_places, lat, lon, radius_m=radius_m, limit=limit)
-        osm_future = pool.submit(
-            fetch_osm_features, lat, lon, radius_m=radius_m)
+        geo_future = pool.submit(fetch_places, lat, lon, radius_m=radius_m, limit=limit, bbox=bbox)
+        osm_future = pool.submit(fetch_osm_features, lat, lon, radius_m=radius_m)
 
         places = geo_future.result()
         try:
@@ -120,9 +155,13 @@ def fetch_places_enriched(lat: float, lon: float, radius_m: int = 5000, limit: i
 
 
 def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
-    lat, lon = geocode_location(location)
-    logger.info("Geocoded %r → (%.4f, %.4f)", location, lat, lon)
-    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit)
+    geo = _geocode_full(location)
+    lat, lon, bbox = geo["lat"], geo["lon"], geo["bbox"]
+    if bbox:
+        logger.info("Geocoded %r → (%.4f, %.4f) with bbox %s", location, lat, lon, bbox)
+    else:
+        logger.info("Geocoded %r → (%.4f, %.4f) — no bbox, using radius %dm", location, lat, lon, radius_m)
+    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit, bbox=bbox)
     logger.info("Fetched %d places for %r (after dedup)", len(places), location)
     return places
 

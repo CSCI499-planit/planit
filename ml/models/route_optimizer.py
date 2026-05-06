@@ -51,6 +51,13 @@ _DAY_END_MINUTES:   int = 22 * 60   # 10:00 PM
 _VRP_SOLVER_TIME_LIMIT_SECONDS: int = 10
 _CANDIDATE_BUFFER_PER_DAY: int = 2
 
+# Max food_and_drink stops per day by pace
+_MAX_FOOD_PER_DAY: dict[str, int] = {
+    "relaxed":  1,
+    "balanced": 1,
+    "packed":   2,
+}
+
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6371.0
@@ -320,66 +327,98 @@ def _greedy_fallback(candidates: list[PlaceRecord], trip_context: dict) -> list[
             )
         ordered = _nearest_neighbor_order(
             day_places, mode=mode, max_travel_min=max_travel_min)
+        ordered = _position_food_stops(ordered)
         day = _build_greedy_day(ordered, day_idx, mode, start_date)
         if day:
             days_out.append(day)
     return days_out
 
 
+def _is_food(place: "PlaceRecord") -> bool:
+    return "food_and_drink" in (place.get("tags") or [])
+
+
 def _ensure_food_stop(
     ranked_places: list[PlaceRecord],
     total_slots:   int,
     trip_days:     int,
+    pace:          str = "balanced",
 ) -> list[PlaceRecord]:
-
+    """Guarantee at least 1 food stop per day, and cap food stops at _MAX_FOOD_PER_DAY."""
+    max_food = _MAX_FOOD_PER_DAY.get(pace, 1)
     slots_per_day = total_slots // trip_days if trip_days else total_slots
     candidates = list(ranked_places[:total_slots])
     used_ids = {p.get("place_id") for p in candidates}
 
     for day in range(trip_days):
         day_start = day * slots_per_day
-        day_end = day_start + slots_per_day
+        day_end   = day_start + slots_per_day
         day_slice = candidates[day_start:day_end]
 
-        has_food = any("food_and_drink" in (p.get("tags") or [])
-                       for p in day_slice)
-        if has_food:
-            continue
+        food_idxs     = [i for i, p in enumerate(day_slice) if _is_food(p)]
+        non_food_idxs = [i for i, p in enumerate(day_slice) if not _is_food(p)]
 
-        # find the best food place not already in candidates
-        food_place = next(
-            (p for p in ranked_places
-             if "food_and_drink" in (p.get("tags") or [])
-             and p.get("place_id") not in used_ids),
-            None,
-        )
-        if food_place is None:
-            continue
+        # --- cap: remove excess food stops above max_food ---
+        while len(food_idxs) > max_food:
+            excess_i = food_idxs.pop()  # lowest-ranked food stop
+            replacement = next(
+                (p for p in ranked_places
+                 if not _is_food(p) and p.get("place_id") not in used_ids),
+                None,
+            )
+            used_ids.discard(candidates[day_start + excess_i].get("place_id"))
+            if replacement:
+                candidates[day_start + excess_i] = replacement
+                used_ids.add(replacement.get("place_id"))
+                non_food_idxs.append(excess_i)
+                logger.info("Capped food stops: replaced '%s' with '%s' on day %d.",
+                            candidates[day_start + excess_i].get("name"),
+                            replacement.get("name"), day + 1)
+            else:
+                candidates.pop(day_start + excess_i)
 
-        non_food_idxs = [
-            i for i, p in enumerate(day_slice)
-            if "food_and_drink" not in (p.get("tags") or [])
-        ]
-        if not non_food_idxs:
-            continue
-
-        replace_idx = day_start + non_food_idxs[-1]  # last = lowest ranked
-        used_ids.discard(candidates[replace_idx].get("place_id"))
-        candidates[replace_idx] = food_place
-        used_ids.add(food_place.get("place_id"))
-        logger.info("Injected food stop '%s' into day %d.",
-                    food_place.get("name"), day + 1)
+        # --- guarantee: inject food stop if none present ---
+        if not food_idxs:
+            food_place = next(
+                (p for p in ranked_places
+                 if _is_food(p) and p.get("place_id") not in used_ids),
+                None,
+            )
+            if food_place and non_food_idxs:
+                replace_i = non_food_idxs[-1]  # lowest-ranked non-food
+                used_ids.discard(candidates[day_start + replace_i].get("place_id"))
+                candidates[day_start + replace_i] = food_place
+                used_ids.add(food_place.get("place_id"))
+                logger.info("Injected food stop '%s' into day %d.",
+                            food_place.get("name"), day + 1)
 
     return candidates
+
+
+def _position_food_stops(ordered: list["PlaceRecord"]) -> list["PlaceRecord"]:
+    """Move food stops to evenly-spaced middle positions (lunch/dinner slots)."""
+    food = [p for p in ordered if _is_food(p)]
+    non_food = [p for p in ordered if not _is_food(p)]
+    n = len(ordered)
+    if not food or n < 2:
+        return ordered
+
+    # For 1 food stop → middle; for 2 → 1/3 and 2/3 positions
+    positions = [n // (len(food) + 1) * (i + 1) for i in range(len(food))]
+    result = list(non_food)
+    for pos, place in zip(positions, food):
+        result.insert(min(pos, len(result)), place)
+    return result
 
 
 def _candidate_pool(
     ranked_places: list[PlaceRecord],
     max_per_day:   int,
     trip_days:     int,
+    pace:          str = "balanced",
 ) -> list[PlaceRecord]:
     total_slots = max_per_day * trip_days
-    candidates = _ensure_food_stop(ranked_places, total_slots, trip_days)
+    candidates = _ensure_food_stop(ranked_places, total_slots, trip_days, pace)
     used_ids = {p.get("place_id") for p in candidates}
     buffer = _CANDIDATE_BUFFER_PER_DAY * trip_days
     for p in ranked_places:
@@ -424,7 +463,7 @@ class RouteOptimizer:
         max_travel_min = _parse_max_travel_minutes(
             trip_context.get("max_travel_minutes", "> 40"))
 
-        candidates = _candidate_pool(ranked_places, max_per_day, trip_days)
+        candidates = _candidate_pool(ranked_places, max_per_day, trip_days, pace)
         candidates = [p for p in candidates if _arrival_window(p) is not None]
         if not candidates:
             return []
@@ -606,18 +645,19 @@ class RouteOptimizer:
                 p for p in ranked_places
                 if p.get("place_id") not in seen_non_food
             ]
-            day_candidates = _ensure_food_stop(day_pool, max_per_day, 1)
+            day_candidates = _ensure_food_stop(day_pool, max_per_day, 1, pace)
             if not day_candidates:
                 break
 
             for p in day_candidates:
-                if "food_and_drink" not in (p.get("tags") or []):
+                if not _is_food(p):
                     pid = p.get("place_id", "")
                     if pid:
                         seen_non_food.add(pid)
 
             ordered = _nearest_neighbor_order(
                 day_candidates, mode=mode, max_travel_min=max_travel_min)
+            ordered = _position_food_stops(ordered)
             day = _build_greedy_day(ordered, day_idx, mode, start_date)
             if day:
                 days_out.append(day)

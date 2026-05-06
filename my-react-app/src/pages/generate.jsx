@@ -1,7 +1,94 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import { userStorage } from '../utils/userStorage'
 import '../components/generate.css'
+import 'azure-maps-control/dist/atlas.min.css'
+import * as atlas from 'azure-maps-control'
+
+const DAY_COLORS = ['#4a9bc5', '#e85d5d', '#16a34a', '#f59e0b', '#8b5cf6', '#ec4899', '#0ea5e9']
+
+function ItineraryMap({ itinerary }) {
+  const mapRef = useRef(null)
+  const mapInstanceRef = useRef(null)
+
+  useEffect(() => {
+    if (!mapRef.current || !itinerary?.length) return
+
+    const allStops = itinerary.flatMap(d => d.stops).filter(s => s.place?.longitude && s.place?.latitude)
+    if (!allStops.length) return
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.dispose()
+      mapInstanceRef.current = null
+    }
+
+    const center = [allStops[0].place.longitude, allStops[0].place.latitude]
+    const map = new atlas.Map(mapRef.current, {
+      center,
+      zoom: 13,
+      authOptions: { authType: 'subscriptionKey', subscriptionKey: import.meta.env.VITE_AZURE_MAPS_KEY },
+      style: 'road',
+    })
+    mapInstanceRef.current = map
+
+    map.events.add('ready', () => {
+      const dataSource = new atlas.source.DataSource()
+      map.sources.add(dataSource)
+
+      itinerary.forEach((day, di) => {
+        const color = DAY_COLORS[di % DAY_COLORS.length]
+        const coords = day.stops
+          .filter(s => s.place?.longitude && s.place?.latitude)
+          .map(s => [s.place.longitude, s.place.latitude])
+
+        if (coords.length > 1) {
+          dataSource.add(new atlas.data.Feature(new atlas.data.LineString(coords), { color }))
+        }
+
+        coords.forEach((coord, si) => {
+          const stop = day.stops[si]
+          dataSource.add(new atlas.data.Feature(new atlas.data.Point(coord), {
+            label: String(si + 1),
+            name: stop.place.name,
+            color,
+            day: day.day,
+          }))
+        })
+      })
+
+      map.layers.add(new atlas.layer.LineLayer(dataSource, null, {
+        strokeColor: ['get', 'color'],
+        strokeWidth: 3,
+        strokeDashArray: [2, 2],
+        filter: ['==', ['geometry-type'], 'LineString'],
+      }))
+
+      map.layers.add(new atlas.layer.BubbleLayer(dataSource, null, {
+        color: ['get', 'color'],
+        radius: 14,
+        strokeColor: '#fff',
+        strokeWidth: 2,
+        filter: ['==', ['geometry-type'], 'Point'],
+      }))
+
+      map.layers.add(new atlas.layer.SymbolLayer(dataSource, null, {
+        textOptions: {
+          textField: ['get', 'label'],
+          color: '#fff',
+          size: 12,
+          font: ['StandardFont-Bold'],
+          offset: [0, 0.1],
+        },
+        iconOptions: { image: 'none' },
+        filter: ['==', ['geometry-type'], 'Point'],
+      }))
+    })
+
+    return () => { if (mapInstanceRef.current) { mapInstanceRef.current.dispose(); mapInstanceRef.current = null } }
+  }, [itinerary])
+
+  return <div ref={mapRef} className="itinerary-map" />
+}
 
 function formatTime(t) {
   if (!t) return null
@@ -69,7 +156,19 @@ function StopCard({ stop }) {
   )
 }
 
-function DayCard({ dayData }) {
+function openInGoogleMaps(stops) {
+  const coords = stops
+    .filter(s => s.place?.latitude && s.place?.longitude)
+    .map(s => `${s.place.latitude},${s.place.longitude}`)
+  if (coords.length === 0) return
+  const origin = coords[0]
+  const destination = coords[coords.length - 1]
+  const waypoints = coords.slice(1, -1).slice(0, 8).join('|')
+  const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&travelmode=driving`
+  window.open(url, '_blank')
+}
+
+function DayCard({ dayData, onLike, onDislike, feedback }) {
   const ordinals = ['','First','Second','Third','Fourth','Fifth','Sixth','Seventh']
   return (
     <div className="day-card">
@@ -77,6 +176,25 @@ function DayCard({ dayData }) {
         <div className="day-card__num">{dayData.day}</div>
         <span className="day-card__title">{ordinals[dayData.day] || `Day ${dayData.day}`} Day</span>
         {dayData.date && <span className="day-card__date">{dayData.date}</span>}
+        <div className="day-card__actions">
+          <button className="gmaps-btn" onClick={() => openInGoogleMaps(dayData.stops)}>
+            Open in Google Maps
+          </button>
+          <button
+            className={`feedback-btn feedback-btn--like ${feedback === 'like' ? 'active' : ''}`}
+            onClick={onLike}
+            disabled={!!feedback}
+          >
+            Like
+          </button>
+          <button
+            className={`feedback-btn feedback-btn--dislike ${feedback === 'dislike' ? 'active' : ''}`}
+            onClick={onDislike}
+            disabled={!!feedback}
+          >
+            Dislike
+          </button>
+        </div>
       </div>
       <div className="stops-timeline">
         {dayData.stops.map((stop, i) => <StopCard key={i} stop={stop} />)}
@@ -93,14 +211,28 @@ export default function GeneratePage() {
   const [itinerary, setItinerary] = useState(null)
   const [saved, setSaved] = useState(false)
   const [toast, setToast] = useState('')
+  const [feedback, setFeedback] = useState({}) // { [day]: 'like' | 'dislike' }
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 2800) }
 
+  const handleFeedback = async (day, type) => {
+    if (feedback[day]) return
+    setFeedback(prev => ({ ...prev, [day]: type }))
+    const eventType = type === 'like' ? 'itinerary_like' : 'itinerary_dislike'
+    const placeId = `itinerary_${location.toLowerCase().replace(/\s+/g, '_')}_day${day}`
+    try {
+      await api.post('/interactions/', { place_id: placeId, event_type: eventType })
+    } catch {
+      // non-fatal
+    }
+    showToast(type === 'like' ? 'Thanks for the feedback!' : 'Got it, we\'ll improve your recommendations.')
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError(''); setLoading(true); setSaved(false); setItinerary(null)
+    setError(''); setLoading(true); setSaved(false); setItinerary(null); setFeedback({})
     try {
-      const data = await api.post('/recommend/itinerary', { location, trip_days: tripDays, top_k: 20, radius_m: 5000, limit: 50 })
+      const data = await api.post('/recommend/itinerary', { location, trip_days: tripDays, top_k: 20, radius_m: 3000, limit: 50 })
       setItinerary(data.itinerary)
     } catch (err) {
       setError(err.message || 'Failed to generate itinerary')
@@ -146,7 +278,18 @@ export default function GeneratePage() {
             </div>
             {itinerary.length === 0
               ? <div className="empty-itinerary">No stops found. Try a different destination!</div>
-              : itinerary.map(day => <DayCard key={day.day} dayData={day} />)
+              : <>
+                  <ItineraryMap itinerary={itinerary} />
+                  {itinerary.map(day => (
+                    <DayCard
+                      key={day.day}
+                      dayData={day}
+                      feedback={feedback[day.day]}
+                      onLike={() => handleFeedback(day.day, 'like')}
+                      onDislike={() => handleFeedback(day.day, 'dislike')}
+                    />
+                  ))}
+                </>
             }
           </div>
         )}
