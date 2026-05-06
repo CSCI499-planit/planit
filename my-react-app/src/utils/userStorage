@@ -1,0 +1,14 @@
+export function getUserId() {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || 'null')
+    return user?.id || user?.email || 'guest'
+  } catch { return 'guest' }
+}
+
+const key = (k) => `${getUserId()}:${k}`
+
+export const userStorage = {
+  get: (k) => { try { return JSON.parse(localStorage.getItem(key(k)) || 'null') } catch { return null } },
+  set: (k, v) => localStorage.setItem(key(k), JSON.stringify(v)),
+  remove: (k) => localStorage.removeItem(key(k)),
+}

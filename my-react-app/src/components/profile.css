@@ -296,3 +296,22 @@
     justify-content: space-between;
   }
 }
+/* ─── PREFS SUMMARY ─── */
+.prefs-summary { display: flex; flex-direction: column; gap: 0.5rem; }
+.pref-row { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.82rem; }
+.pref-label { font-weight: 600; color: #64748b; min-width: 70px; text-transform: capitalize; }
+.pref-val { color: #0f172a; text-transform: capitalize; }
+.pref-row--tags { flex-direction: column; gap: 0.25rem; }
+.pref-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.pref-tag { background: #eef6ff; color: #4da3ff; font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; text-transform: capitalize; }
+
+/* ─── PREFS EDITOR ─── */
+.prefs-editor { display: flex; flex-direction: column; gap: 1rem; }
+.prefs-editor fieldset { border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.85rem; margin: 0; background: #f8fafc; }
+.prefs-editor legend { font-size: 0.75rem; font-weight: 700; color: #475569; padding: 0 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.pref-radio-group, .pref-check-group { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.pref-radio-group label, .pref-check-group label { font-size: 0.78rem; background: #fff; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 0.35rem 0.7rem; cursor: pointer; transition: all 0.12s; display: flex; align-items: center; gap: 5px; }
+.pref-radio-group label.active, .pref-check-group label.active { background: #eef6ff; border-color: #4da3ff; color: #4da3ff; font-weight: 600; }
+.pref-radio-group input, .pref-check-group input { display: none; }
+.pref-slider { width: 100%; accent-color: #4da3ff; margin-top: 0.5rem; }
+.prefs-editor__actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 0.5rem; }
