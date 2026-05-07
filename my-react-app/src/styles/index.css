@@ -36,7 +36,8 @@ html, body, #root {
 }
 
 body {
-  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* font-family: "DM Sans", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; */
+  font-family: "Space Grotesk", sans-serif;
   line-height: 1.5;
 
   -webkit-font-smoothing: antialiased;
