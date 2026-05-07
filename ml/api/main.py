@@ -298,7 +298,36 @@ async def lifespan(app: FastAPI):
     app.state.retrain_lock    = asyncio.Lock()
     app.state.last_retrain_at = datetime.now(timezone.utc)
     logger.info("ML pipeline ready. place_tag_db has %d entries.", len(app.state.place_tag_db))
+
+    asyncio.create_task(_persist_tag_db(app))
     yield
+
+
+async def _persist_tag_db(app: FastAPI) -> None:
+    """Periodically save the artifact when run_stage1 has grown place_tag_db.
+
+    run_stage1 accumulates {place_id: tags} in memory on every recommendation
+    request, but pipeline.save() only runs during _fetch_and_train(). On Render
+    free tier the service restarts before enough interactions trigger a retrain,
+    so the tag cache is lost. This task saves the artifact every 5 minutes when
+    the cache has grown, keeping it fresh across restarts.
+    """
+    last_saved_size = len(app.state.pipeline.place_tag_db)
+    while True:
+        await asyncio.sleep(300)  # 5-minute cadence
+        try:
+            pipeline = app.state.pipeline
+            current_size = len(pipeline.place_tag_db)
+            if current_size > last_saved_size + 4:  # at least 5 new entries
+                logger.info(
+                    "place_tag_db grew %d → %d — persisting artifact.",
+                    last_saved_size, current_size,
+                )
+                await asyncio.to_thread(pipeline.save)
+                await asyncio.to_thread(_upload_artifact, pipeline.config.profiler_path)
+                last_saved_size = current_size
+        except Exception as e:
+            logger.warning("place_tag_db persister error: %s", e)
 
 
 app = FastAPI(
