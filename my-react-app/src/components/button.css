@@ -1,40 +1,47 @@
-.btn {
+.hero .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
   font-family: inherit;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
   padding: 0.75rem 1.75rem;
-  border: none;
-  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  border: 1px solid transparent;
+  transition: transform 0.25s, box-shadow 0.25s, background 0.25s, border-color 0.25s;
   white-space: nowrap;
 }
 
-.btn:hover { 
-  transform: translateY(-2px); 
+.hero .btn:hover { 
+  transform: translateY(-3px); 
 }
 
-.btn--primary {
-  background: var(--color-primary);
+.hero .btn--primary {
+  /* background: var(--color-primary); */
+  background: rgba(34, 33, 33, 0.75);
+  /* background: linear-gradient(#7ec9cf, #6f9dcc); */
   color: var(--color-white);
   box-shadow: var(--shadow-lg);
 }
 
-.btn--primary:hover {
-  background: #2a2a2a;
+.hero .btn--primary:hover {
+  /* background: #2a2a2a; */
+  transform: translateY(-3px);
+  background: linear-gradient(rgba(167, 235, 239, 0.6), rgba(52, 95, 137, 0.9));
+  box-shadow: 0 15px 40px rgba(101, 101, 101, 0.25);
 }
 
-.btn--secondary {
-  background: rgba(255,255,255,0.75);
-  color: var(--color-text-dark);
+.hero .btn--secondary {
+  background: rgba(255,255,255,0.8);
+  /* color: var(--color-text-dark); */
+  color: #2286c0;
   border: none;
-  backdrop-filter: blur(8px);
   box-shadow: var(--shadow-md);
 }
 
-.btn--secondary:hover {
-  background: rgba(255,255,255,0.95);
+.hero .btn--secondary:hover {
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 15px 40px rgba(101, 101, 101, 0.25);
 }

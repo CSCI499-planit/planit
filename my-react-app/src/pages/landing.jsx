@@ -4,6 +4,11 @@ import Globe from 'react-globe.gl'
 import { TextureLoader, ShaderMaterial, Vector2 } from 'three'
 import * as solar from 'solar-calculator'
 
+
+// ISSUE: globe shading problem; attempt to fix if there's time
+// ADDITIONS: 
+// - Maybe add atmospheric glow around the globe
+// - Check what else can be added to learn more section
 const sunPosAt = (dt) => {
   const day = new Date(+dt).setUTCHours(0, 0, 0, 0)
   const t = solar.century(dt)
@@ -38,6 +43,13 @@ export default function LandingPage() {
   // }, [])
 
   const globeEl = useRef()
+  const learnMoreRef = useRef(null)
+
+  const scrollToLearnMore = () => {
+    learnMoreRef.current?.scrollIntoView({
+      behavior: 'smooth'
+    })
+  }
 
   useEffect(() => {
     if (!globeEl.current) return
@@ -53,7 +65,8 @@ export default function LandingPage() {
     controls.rotateSpeed = 0.8
     controls.zoomSpeed = 0.8
 
-    globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 2.5 })
+    // Adjust altitude to change the zoomed view of the globe
+    globeEl.current.pointOfView({ lat: 20, lng: 0, altitude: 2.0 })
 
   }, [])
   
@@ -152,7 +165,7 @@ export default function LandingPage() {
         
           // Adjust Globe Brightness:
           vec4 color = mix(nightColor, dayColor, blendFactor);
-          color.rgb *= 0.65;
+          color.rgb *= 0.80;
           // float edge = dot(normalize(vNormal), vec3(0.0, 0.0, 1.0));
           // color.rgb *= smoothstep(0.2, 1.0, edge);
 
@@ -176,63 +189,126 @@ export default function LandingPage() {
   
 
   return (
-    <section className="hero">
-      {/* Have the globe be the background */}
-      <div className="hero__bg">
-        <Globe
-          ref={globeEl}
-          globeMaterial={globeMaterial}
-          backgroundImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/night-sky.png"
-          width={window.innerWidth}
-          height={window.innerHeight}
-          onZoom={({ lng, lat }) => {
-            if (globeMaterial) {
-              globeMaterial.uniforms.globeRotation.value.set(lng, lat)
-            }
-          }}
-        />
-      </div>
-
-      <div className="hero__content">
-        <h1 className="hero__headline">
-          Your next trip,<br />
-          <em>planned in seconds!</em>
-        </h1>
-
-        <p className="hero__sub">Not hours.</p>
-
-        <p className="hero__body">
-          PlanIt turns your interests, budget, and dates into a complete day-by-day
-          itinerary automatically. No more tab-hopping, no more guesswork.
-        </p>
-
-        <div className="hero__ctas">
-          <button className="btn btn--primary" onClick={() => navigate('/signup')}>Start Planning for Free!</button>
-          <button className="btn btn--secondary">Learn More</button>
-        </div>
-
-        <div className="hero__stats">
-          <div className="stat"><span className="stat__value">Free</span><span className="stat__label">For everyone</span></div>
-          <div className="stat"><span className="stat__value">100%</span><span className="stat__label">Tailored to you</span></div>
-          <div className="stat"><span className="stat__value">67k</span><span className="stat__label">Users in NY (and growing)</span></div>
-        </div>
-
-      </div>
-
-      <div className="hero__time">
-        {new Date(now).toLocaleString()}
-      </div>
-
-      {/* <div className="hero__globe-wrap">
-        <div className="hero__globe" ref={globeRef}>
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/The_Earth_seen_from_Apollo_17.jpg/1024px-The_Earth_seen_from_Apollo_17.jpg"
-            alt="Earth"
-            className="hero__globe-img"
+    <>
+      <section className="hero">
+        {/* Makes the globe the background */}
+        <div className="hero__bg">
+          <Globe
+            ref={globeEl}
+            globeMaterial={globeMaterial}
+            backgroundImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/night-sky.png"
+            width={window.innerWidth}
+            height={window.innerHeight}
+            onZoom={({ lng, lat }) => {
+              if (globeMaterial) {
+                globeMaterial.uniforms.globeRotation.value.set(lng, lat)
+              }
+            }}
           />
-          <div className="hero__globe-glow" />
         </div>
-      </div> */}
-    </section>
+
+        <div className="hero__content">
+          <h1 className="hero__headline">
+            Your next trip,<br />
+            <em>planned in seconds!</em>
+          </h1>
+
+          <p className="hero__sub">Not hours.</p>
+
+          <p className="hero__body">
+            PlanIt turns your interests, budget, and dates into a complete day-by-day
+            itinerary automatically. No more tab-hopping, no more guesswork.
+          </p>
+
+          <div className="hero__ctas">
+            <button className="btn btn--primary" onClick={() => navigate('/signup')}>Start Planning for Free!</button>
+            <button className="btn btn--secondary" onClick={scrollToLearnMore}>Learn More</button>
+          </div>
+
+          <div className="hero__stats">
+            <div className="stat"><span className="stat__value">Free</span><span className="stat__label">For everyone</span></div>
+            <div className="stat"><span className="stat__value">100%</span><span className="stat__label">Tailored to you</span></div>
+            <div className="stat"><span className="stat__value">67k</span><span className="stat__label">Users in NY (and growing)</span></div>
+          </div>
+
+        </div>
+
+        <div className="hero__time">
+          {new Date(now).toLocaleString()}
+        </div>
+
+        {/* <div className="hero__globe-wrap">
+          <div className="hero__globe" ref={globeRef}>
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/The_Earth_seen_from_Apollo_17.jpg/1024px-The_Earth_seen_from_Apollo_17.jpg"
+              alt="Earth"
+              className="hero__globe-img"
+            />
+            <div className="hero__globe-glow" />
+          </div>
+        </div> */}
+      </section>
+
+      <section className="learn-more" ref={learnMoreRef}>
+        <div className="learn-more__inner">
+
+          <p className="learn-more__header">
+            HOW IT WORKS
+          </p>
+
+          <h2 className="learn-more__title">
+            Travel planning without the chaos.
+          </h2>
+
+          <p className="learn-more__text">
+            PlanIt builds personalized itineraries based on your
+            interests, budget, duration, and pace all in the span of seconds.
+          </p>
+
+          <div className="learn-more__grid">
+            <div className="learn-card">
+              <div className="learn-card__number">01</div>
+
+              <h3>Create your account</h3>
+
+              <p>
+                Set up your profile and tell PlanIt how you like to travel.
+              </p>
+            </div>
+
+            <div className="learn-card">
+              <div className="learn-card__number">02</div>
+
+              <h3>Answer a quick travel survey</h3>
+
+              <p>
+                Share your interests, budget, pace, and travel preferences.
+              </p>
+            </div>
+
+            <div className="learn-card">
+              <div className="learn-card__number">03</div>
+
+              <h3>Enter your destination & dates</h3>
+
+              <p>
+                Choose where you're going and how long you're staying.
+              </p>
+            </div>
+
+            <div className="learn-card">
+              <div className="learn-card__number">04</div>
+
+              <h3>Receive your personalized itinerary</h3>
+
+              <p>
+                Get a complete day-by-day plan built around your travel style.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+    </>
   )
 }
