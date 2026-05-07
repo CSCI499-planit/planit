@@ -1,6 +1,4 @@
 # Stage 2 — user preference profiling
-# Keeps tag slots clean, stores CF signal in the remaining embedding dims.
-# CF weight ramps continuously from 0 → 0.8 as the user base grows to 100.
 
 from __future__ import annotations
 
@@ -22,7 +20,7 @@ from ml.models.place_classifier import PLACE_TAGS
 
 logger = logging.getLogger(__name__)
 
-# field values must match the survey form exactly — mismatches are silently ignored
+# field values must match the survey form exactly
 ALL_TAGS: list[str] = PLACE_TAGS   # 15 place tags from Stage 1
 
 ALL_CUISINES: list[str] = [
@@ -41,8 +39,7 @@ ALL_PART_TYPES: list[str] = ["solo", "couple", "friends", "family", "mixed"]
 
 ALL_USE_CASES: list[str] = ["local", "daytrip", "travel", "mixed"]
 
-# SVD is statistically unreliable below this user count — skip it and stay
-# content-only. CF weight ramps up continuously from zero above this threshold.
+# SVD is statistically unreliable below this user count
 MIN_SVD_USERS: int = 20
 
 # O(1) lookup dicts — replaces list.index() calls in _encode_preferences
@@ -64,7 +61,7 @@ _CONTENT_DIM: int = (
     + 4                     # scalars: budget tiers, exploration, popularity
 )  # = 48
 
-EMBEDDING_DIM: int = 48  # must equal _CONTENT_DIM — see assertion below
+EMBEDDING_DIM: int = 48  # must equal _CONTENT_DIM
 assert _CONTENT_DIM == EMBEDDING_DIM, (
     f"Content dim {_CONTENT_DIM} must equal EMBEDDING_DIM {EMBEDDING_DIM}. "
     "Update both together or add a learned projection layer."
@@ -241,7 +238,7 @@ class UserProfiler:
             self._visits_to_fixed_tag_vector(visits) if visits else None
         )
 
-        # no visit history, model not trained, or SVD unavailable — content-only
+        # no visit history, model not trained, or SVD unavailable
         if not self._is_fitted or not visits or self._svd is None:
             return self._compose_embedding(content_raw, tag_vec)
 
@@ -285,9 +282,10 @@ class UserProfiler:
         return profiler
 
     @staticmethod
+    # ramping up of CF
     def _cf_weight(n_users: int, target_users: int = 100) -> float:
         # ramps CF contribution 0 → 0.8 as user count grows 0 → 100
-        # at 29 users: 0.23   (meaningful signal even at current scale)
+        # at 29 users: 0.23  
         # at 50 users: 0.40
         # at 100 users: 0.80  (max CF contribution)
         return 0.8 * min(n_users / target_users, 1.0)
