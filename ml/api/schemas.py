@@ -90,9 +90,9 @@ class ItineraryRequest(BaseModel):
 
 
 class TravelLegSchema(BaseModel):
-    mode:       str
-    minutes:    int
-    distance_m: int
+    mode:             str
+    duration_minutes: int
+    distance_m:       int
 
 
 class StopSchema(BaseModel):
