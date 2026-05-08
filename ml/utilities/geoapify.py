@@ -88,7 +88,8 @@ def _geocode_full(location: str) -> dict:
         bbox = None
         diagonal_m = 0.0
 
-    return {"lat": lat, "lon": lon, "bbox": bbox, "bbox_diagonal_m": diagonal_m}
+    place_id = props.get("place_id") or ""
+    return {"lat": lat, "lon": lon, "bbox": bbox, "bbox_diagonal_m": diagonal_m, "place_id": place_id}
 
 
 def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
@@ -131,9 +132,12 @@ def fetch_places(
     radius_m: int = 5000,
     limit: int = 50,
     bbox: list[float] | None = None,
+    place_id: str = "",
 ) -> list[PlaceRecord]:
-    # Prefer bbox rect filter (exact place boundary) over circle when available
-    if bbox:
+    # Prefer polygon filter (exact admin boundary) over rect bbox over circle
+    if place_id:
+        geo_filter = f"place:{place_id}"
+    elif bbox:
         geo_filter = f"rect:{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
     else:
         geo_filter = f"circle:{lon},{lat},{radius_m}"
@@ -157,21 +161,19 @@ def fetch_places_enriched(
     limit: int = 50,
     bbox: list[float] | None = None,
     bbox_diagonal_m: float = 0.0,
+    place_id: str = "",
 ) -> list[PlaceRecord]:
     """Like fetch_places() but runs OSM enrichment in parallel for better tagging."""
     from concurrent.futures import ThreadPoolExecutor
     from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
 
-    # When bbox covers a large area (city-scale), use half the diagonal as the
-    # OSM radius so features overlap with the places Geoapify returned, capped
-    # to avoid Overpass timeouts.
     if bbox_diagonal_m > 0:
         osm_radius = min(int(bbox_diagonal_m / 2), _MAX_OSM_RADIUS_M)
     else:
         osm_radius = radius_m
 
     with ThreadPoolExecutor(max_workers=2) as pool:
-        geo_future = pool.submit(fetch_places, lat, lon, radius_m=radius_m, limit=limit, bbox=bbox)
+        geo_future = pool.submit(fetch_places, lat, lon, radius_m=radius_m, limit=limit, bbox=bbox, place_id=place_id)
         osm_future = pool.submit(fetch_osm_features, lat, lon, radius_m=osm_radius)
 
         places = geo_future.result()
@@ -186,12 +188,14 @@ def fetch_places_enriched(
 
 def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
     geo = _geocode_full(location)
-    lat, lon, bbox, diag = geo["lat"], geo["lon"], geo["bbox"], geo["bbox_diagonal_m"]
-    if bbox:
+    lat, lon, bbox, diag, place_id = geo["lat"], geo["lon"], geo["bbox"], geo["bbox_diagonal_m"], geo["place_id"]
+    if place_id:
+        logger.info("Geocoded %r → (%.4f, %.4f) using polygon filter place_id=%s", location, lat, lon, place_id)
+    elif bbox:
         logger.info("Geocoded %r → (%.4f, %.4f) bbox diagonal %.0fm", location, lat, lon, diag)
     else:
         logger.info("Geocoded %r → (%.4f, %.4f) — point geocode, using radius %dm", location, lat, lon, radius_m)
-    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit, bbox=bbox, bbox_diagonal_m=diag)
+    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit, bbox=bbox, bbox_diagonal_m=diag, place_id=place_id)
     logger.info("Fetched %d places for %r (after dedup)", len(places), location)
     return places
 
