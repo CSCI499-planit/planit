@@ -17,4 +17,5 @@ postgrest
 pydantic
 httpx
 cachetools>=5.3
+openai>=1.0
 

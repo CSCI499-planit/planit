@@ -56,7 +56,7 @@ _DAY_END_MINUTES:   int = 22 * 60   # 10:00 PM
 
 _VRP_SOLVER_TIME_LIMIT_SECONDS: int = 10
 _CANDIDATE_BUFFER_PER_DAY: int = 2
-_LONG_ARC_PENALTY: int = 10_000
+_LONG_ARC_PENALTY_MULTIPLIER: int = 3  # penalty = max_travel_min * this; big enough to discourage, small enough to stay under 24h OR-Tools cap
 
 # Max food_and_drink stops per day by pace
 _MAX_FOOD_PER_DAY: dict[str, int] = {
@@ -99,7 +99,7 @@ def _build_haversine_matrix(
                 dist_km = _haversine_km(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
                 raw_time = max(1, round((dist_km / speed) * 60))
                 if j != 0 and raw_time > max_travel_min:
-                    row.append(raw_time + _LONG_ARC_PENALTY)
+                    row.append(raw_time + max_travel_min * _LONG_ARC_PENALTY_MULTIPLIER)
                 else:
                     row.append(raw_time)
         matrix.append(row)
@@ -397,13 +397,14 @@ def _ensure_food_stop(
                  if not _is_food(p) and p.get("place_id") not in used_ids),
                 None,
             )
+            original_name = candidates[day_start + excess_i].get("name")
             used_ids.discard(candidates[day_start + excess_i].get("place_id"))
             if replacement:
                 candidates[day_start + excess_i] = replacement
                 used_ids.add(replacement.get("place_id"))
                 non_food_idxs.append(excess_i)
                 logger.info("Capped food stops: replaced '%s' with '%s' on day %d.",
-                            candidates[day_start + excess_i].get("name"),
+                            original_name,
                             replacement.get("name"), day + 1)
             else:
                 candidates.pop(day_start + excess_i)
@@ -523,7 +524,7 @@ class RouteOptimizer:
             for i in range(n):
                 for j in range(n):
                     if i != j and j != 0 and time_matrix[i][j] > max_travel_min:
-                        time_matrix[i][j] += _LONG_ARC_PENALTY
+                        time_matrix[i][j] += max_travel_min * _LONG_ARC_PENALTY_MULTIPLIER
         except UnsupportedTravelModeError:
             time_matrix = _build_haversine_matrix(locations, mode, max_travel_min)
         except AzureMapsError as e:

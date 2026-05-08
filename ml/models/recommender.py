@@ -149,7 +149,7 @@ class HybridRecommender:
                 popularity_score = min(
                     raw_pop / _POPULARITY_NORM, 1.0) * pop_weight
             else:
-                popularity_score = 0.0
+                popularity_score = 0.05 * pop_weight  # small floor so score never stays zero with no data
 
         cuisine_bonus = 0.0
         if "food_and_drink" in place_tags:

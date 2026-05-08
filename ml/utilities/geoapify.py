@@ -179,7 +179,8 @@ def fetch_places_enriched(
         places = geo_future.result()
         try:
             osm_features = osm_future.result()
-            places = enrich_places_with_osm(places, osm_features)
+            osm_match_dist = min(150 + bbox_diagonal_m * 0.003, 500.0)
+            places = enrich_places_with_osm(places, osm_features, max_dist_m=osm_match_dist)
         except Exception as e:
             logger.warning("OSM enrichment failed (skipping): %s", e)
 

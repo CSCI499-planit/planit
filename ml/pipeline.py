@@ -38,6 +38,7 @@ class MLPipeline:
         self.user_profiler.place_tag_db.update(value)
 
     def run_stage1(self, places: list[PlaceRecord]) -> list[PlaceRecord]:
+        from ml.services.llm_tagger import tag_untagged_places
         logger.info("Stage 1: tagging %d places", len(places))
         tagged = []
         for p in places:
@@ -46,8 +47,7 @@ class MLPipeline:
             else:
                 tags = [tag for tag, val in rule_based_labels(p).items() if val == 1]
                 tagged.append({**p, "tags": tags})
-        # Cache tags so _fetch_and_train has them at retrain time even though
-        # the place table is empty (places are fetched from Geoapify per-request).
+        tagged = tag_untagged_places(tagged)
         for p in tagged:
             pid = str(p.get("place_id") or "")
             if pid and p.get("tags"):

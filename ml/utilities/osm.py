@@ -38,22 +38,21 @@ out center;
 
 
 def fetch_osm_features(lat: float, lon: float, radius_m: int = 5000) -> list[dict]:
-    try:
-        resp = httpx.post(
-            OVERPASS_URL,
-            data={"data": _QUERY.format(lat=lat, lon=lon, r=radius_m)},
-            headers={"User-Agent": "PlanIt/1.0 (travel-recommendation-app; contact@planit.app)"},
-            timeout=60.0,
-        )
-        resp.raise_for_status()
-        elements = resp.json().get("elements", [])
-        logger.info("Fetched %d OSM features near (%.4f, %.4f)",
-                    len(elements), lat, lon)
-        return elements
-    except Exception as e:
-        logger.warning(
-            "Overpass query failed: %s — skipping OSM enrichment", e)
-        return []
+    query_data = {"data": _QUERY.format(lat=lat, lon=lon, r=radius_m)}
+    headers    = {"User-Agent": "PlanIt/1.0 (travel-recommendation-app; contact@planit.app)"}
+    for attempt in range(2):
+        try:
+            resp = httpx.post(OVERPASS_URL, data=query_data, headers=headers, timeout=30.0)
+            resp.raise_for_status()
+            elements = resp.json().get("elements", [])
+            logger.info("Fetched %d OSM features near (%.4f, %.4f)", len(elements), lat, lon)
+            return elements
+        except Exception as e:
+            if attempt == 0:
+                logger.warning("Overpass attempt 1 failed (%s) — retrying", e)
+            else:
+                logger.warning("Overpass attempt 2 failed (%s) — skipping OSM enrichment", e)
+    return []
 
 
 def _element_latlon(el: dict) -> tuple[float, float] | None:
