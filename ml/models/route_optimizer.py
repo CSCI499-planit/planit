@@ -609,10 +609,15 @@ class RouteOptimizer:
                 "OR-Tools returned no solution — falling back to greedy ordering.")
             return _greedy_fallback(candidates, trip_context)
 
-        return self._extract_solution(
+        days_out = self._extract_solution(
             manager, routing, solution, candidates,
             time_dim, trip_days, mode, start_date,
         )
+        if not days_out:
+            logger.warning(
+                "OR-Tools dropped all nodes (trivial solution) — falling back to greedy ordering.")
+            return _greedy_fallback(candidates, trip_context)
+        return days_out
 
     @staticmethod
     def _extract_solution(
