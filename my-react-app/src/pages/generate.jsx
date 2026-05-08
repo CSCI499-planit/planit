@@ -263,7 +263,13 @@ function StopCard({ stop }) {
 
         {travel_to_next && (
           <div className="stop-card__travel">
-            {travel_to_next.duration_minutes} min to next stop
+            {travel_to_next.duration_minutes} min
+            {travel_to_next.distance_m > 0 && (
+              <> · {travel_to_next.distance_m >= 1609
+                ? `${(travel_to_next.distance_m / 1609.34).toFixed(1)} mi`
+                : `${Math.round(travel_to_next.distance_m * 3.281)} ft`} to next stop</>
+            )}
+            {!travel_to_next.distance_m && <> to next stop</>}
           </div>
         )}
       </div>

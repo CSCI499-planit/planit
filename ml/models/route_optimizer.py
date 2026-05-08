@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import re
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
     from ml.data.preprocess import PlaceRecord
 
 from ml.models.user_profiler import PACE_TO_MAX_PLACES
+from ml.services.azure_maps_client import (
+    AzureMapsError,
+    UnsupportedTravelModeError,
+    build_time_matrix as _azure_build_time_matrix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,7 @@ _DAY_END_MINUTES:   int = 22 * 60   # 10:00 PM
 
 _VRP_SOLVER_TIME_LIMIT_SECONDS: int = 10
 _CANDIDATE_BUFFER_PER_DAY: int = 2
+_LONG_ARC_PENALTY: int = 10_000
 
 # Max food_and_drink stops per day by pace
 _MAX_FOOD_PER_DAY: dict[str, int] = {
@@ -73,6 +80,30 @@ def _travel_minutes(lat1: float, lon1: float, lat2: float, lon2: float, mode: st
     dist_km = _haversine_km(lat1, lon1, lat2, lon2)
     speed = _TRAVEL_SPEED_KMH.get(mode, 25.0)
     return max(1, round((dist_km / speed) * 60))
+
+
+def _build_haversine_matrix(
+    coords: list[tuple[float, float]],
+    travel_mode: str,
+    max_travel_min: int = 90,
+) -> list[list[int]]:
+    speed = _TRAVEL_SPEED_KMH.get(travel_mode, 25.0)
+    n = len(coords)
+    matrix: list[list[int]] = []
+    for i in range(n):
+        row = []
+        for j in range(n):
+            if i == j:
+                row.append(0)
+            else:
+                dist_km = _haversine_km(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
+                raw_time = max(1, round((dist_km / speed) * 60))
+                if j != 0 and raw_time > max_travel_min:
+                    row.append(raw_time + _LONG_ARC_PENALTY)
+                else:
+                    row.append(raw_time)
+        matrix.append(row)
+    return matrix
 
 
 def _dwell_minutes(place: PlaceRecord) -> int:
@@ -241,7 +272,7 @@ def _build_day(
                 nxt.get("latitude", 0.0),   nxt.get("longitude", 0.0),
             ) * 1000)
             travel_to_next = {"mode": mode,
-                              "minutes": t_min, "distance_m": dist_m}
+                              "duration_minutes": t_min, "distance_m": dist_m}
             if not arrival_times:
                 _greedy_time = dep_min + t_min
 
@@ -484,26 +515,23 @@ class RouteOptimizer:
         locations = [(depot_lat, depot_lon)] + [(p.get("latitude",
                                                        0.0), p.get("longitude", 0.0)) for p in candidates]
         n = len(locations)
-        speed = _TRAVEL_SPEED_KMH.get(mode, 25.0)
 
-        _LONG_ARC_PENALTY = 10_000
-
-        time_matrix: list[list[int]] = []
-        for i in range(n):
-            row = []
-            for j in range(n):
-                if i == j:
-                    row.append(0)
-                else:
-                    dist_km = _haversine_km(locations[i][0], locations[i][1],
-                                            locations[j][0], locations[j][1])
-                    raw_time = max(1, round((dist_km / speed) * 60))
-
-                    if j != 0 and raw_time > max_travel_min:
-                        row.append(raw_time + _LONG_ARC_PENALTY)
-                    else:
-                        row.append(raw_time)
-            time_matrix.append(row)
+        fallback_enabled = os.getenv("AZURE_MATRIX_FALLBACK_ENABLED", "true").lower() == "true"
+        try:
+            raw_matrix = _azure_build_time_matrix(locations, mode)
+            time_matrix = [row[:] for row in raw_matrix]
+            for i in range(n):
+                for j in range(n):
+                    if i != j and j != 0 and time_matrix[i][j] > max_travel_min:
+                        time_matrix[i][j] += _LONG_ARC_PENALTY
+        except UnsupportedTravelModeError:
+            time_matrix = _build_haversine_matrix(locations, mode, max_travel_min)
+        except AzureMapsError as e:
+            if fallback_enabled:
+                logger.warning("Azure matrix unavailable (%s), falling back to haversine", e)
+                time_matrix = _build_haversine_matrix(locations, mode, max_travel_min)
+            else:
+                raise
 
         service_times = [0] + [_dwell_minutes(p) for p in candidates]
 

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import logging
 from difflib import SequenceMatcher
@@ -37,11 +38,25 @@ def geocode_location(location: str) -> tuple[float, float]:
     return geo["lat"], geo["lon"]
 
 
+_MIN_BBOX_DIAGONAL_M = 300   # smaller → point geocode, fall back to radius
+_MAX_OSM_RADIUS_M    = 5_000 # Overpass cap to avoid timeouts on large bboxes
+
+
+def _bbox_diagonal_m(bbox: list[float]) -> float:
+    """Return the diagonal of a [W, S, E, N] bbox in metres."""
+    west, south, east, north = bbox
+    lat_m = (north - south) * 111_320
+    lon_m = (east - west) * 111_320 * math.cos(math.radians((south + north) / 2))
+    return math.hypot(lat_m, lon_m)
+
+
 def _geocode_full(location: str) -> dict:
-    """Geocode and return lat, lon, and bbox (if available).
+    """Geocode and return lat, lon, bbox, and bbox_diagonal_m.
 
     bbox is [west, south, east, north] (min_lon, min_lat, max_lon, max_lat).
-    Returns {"lat": float, "lon": float, "bbox": list[float] | None}.
+    bbox is set to None when the geocoded result is a point rather than an
+    area (diagonal < _MIN_BBOX_DIAGONAL_M), so callers fall back to radius.
+    Returns {"lat", "lon", "bbox", "bbox_diagonal_m"}.
     """
     resp = httpx.get(
         "https://api.geoapify.com/v1/geocode/search",
@@ -67,7 +82,13 @@ def _geocode_full(location: str) -> dict:
     elif isinstance(feat.get("bbox"), list) and len(feat["bbox"]) == 4:
         bbox = feat["bbox"]
 
-    return {"lat": lat, "lon": lon, "bbox": bbox}
+    diagonal_m = _bbox_diagonal_m(bbox) if bbox else 0.0
+    if diagonal_m < _MIN_BBOX_DIAGONAL_M:
+        # Point geocode (lake, address, landmark) — bbox is useless for place search
+        bbox = None
+        diagonal_m = 0.0
+
+    return {"lat": lat, "lon": lon, "bbox": bbox, "bbox_diagonal_m": diagonal_m}
 
 
 def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
@@ -135,14 +156,23 @@ def fetch_places_enriched(
     radius_m: int = 5000,
     limit: int = 50,
     bbox: list[float] | None = None,
+    bbox_diagonal_m: float = 0.0,
 ) -> list[PlaceRecord]:
     """Like fetch_places() but runs OSM enrichment in parallel for better tagging."""
     from concurrent.futures import ThreadPoolExecutor
     from ml.utilities.osm import fetch_osm_features, enrich_places_with_osm
 
+    # When bbox covers a large area (city-scale), use half the diagonal as the
+    # OSM radius so features overlap with the places Geoapify returned, capped
+    # to avoid Overpass timeouts.
+    if bbox_diagonal_m > 0:
+        osm_radius = min(int(bbox_diagonal_m / 2), _MAX_OSM_RADIUS_M)
+    else:
+        osm_radius = radius_m
+
     with ThreadPoolExecutor(max_workers=2) as pool:
         geo_future = pool.submit(fetch_places, lat, lon, radius_m=radius_m, limit=limit, bbox=bbox)
-        osm_future = pool.submit(fetch_osm_features, lat, lon, radius_m=radius_m)
+        osm_future = pool.submit(fetch_osm_features, lat, lon, radius_m=osm_radius)
 
         places = geo_future.result()
         try:
@@ -156,12 +186,12 @@ def fetch_places_enriched(
 
 def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
     geo = _geocode_full(location)
-    lat, lon, bbox = geo["lat"], geo["lon"], geo["bbox"]
+    lat, lon, bbox, diag = geo["lat"], geo["lon"], geo["bbox"], geo["bbox_diagonal_m"]
     if bbox:
-        logger.info("Geocoded %r → (%.4f, %.4f) with bbox %s", location, lat, lon, bbox)
+        logger.info("Geocoded %r → (%.4f, %.4f) bbox diagonal %.0fm", location, lat, lon, diag)
     else:
-        logger.info("Geocoded %r → (%.4f, %.4f) — no bbox, using radius %dm", location, lat, lon, radius_m)
-    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit, bbox=bbox)
+        logger.info("Geocoded %r → (%.4f, %.4f) — point geocode, using radius %dm", location, lat, lon, radius_m)
+    places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit, bbox=bbox, bbox_diagonal_m=diag)
     logger.info("Fetched %d places for %r (after dedup)", len(places), location)
     return places
 

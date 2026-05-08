@@ -16,3 +16,5 @@ bcrypt
 postgrest
 pydantic
 httpx
+cachetools>=5.3
+
