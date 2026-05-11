@@ -29,52 +29,54 @@ export default function SigninPage() {
   }
 
   return (
-    <div className="signup-page">
-      <div className="signup-container">
-        <div className="signup-header">
-          <h1>Welcome Back</h1>
-          <p>Sign in to continue planning</p>
+    <div className="signin">
+      <div className="signup-page">
+        <div className="signup-container">
+          <div className="signup-header">
+            <h1>Welcome Back</h1>
+            <p>Sign in to continue planning</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="signup-form">
+            <div className="form-group">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            {error && <p className="form-error">{error}</p>}
+
+            <button
+              type="submit"
+              className="btn btn--primary signup-btn"
+              disabled={loading}
+            >
+              {loading ? 'Signing in…' : 'Sign In'}
+            </button>
+          </form>
+
+          <p className="signup-footer">
+            Don't have an account? <Link to="/signup">Sign up</Link>
+          </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="signup-form">
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-
-          {error && <p className="form-error">{error}</p>}
-
-          <button
-            type="submit"
-            className="btn btn--primary signup-btn"
-            disabled={loading}
-          >
-            {loading ? 'Signing in…' : 'Sign In'}
-          </button>
-        </form>
-
-        <p className="signup-footer">
-          Don't have an account? <Link to="/signup">Sign up</Link>
-        </p>
       </div>
     </div>
   )
