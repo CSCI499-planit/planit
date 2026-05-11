@@ -56,7 +56,8 @@ _DAY_END_MINUTES:   int = 22 * 60   # 10:00 PM
 
 _VRP_SOLVER_TIME_LIMIT_SECONDS: int = 10
 _CANDIDATE_BUFFER_PER_DAY: int = 2
-_LONG_ARC_PENALTY_MULTIPLIER: int = 3  # penalty = max_travel_min * this; big enough to discourage, small enough to stay under 24h OR-Tools cap
+# penalty = max_travel_min * this; big enough to discourage, small enough to stay under 24h OR-Tools cap
+_LONG_ARC_PENALTY_MULTIPLIER: int = 3
 
 # Max food_and_drink stops per day by pace
 _MAX_FOOD_PER_DAY: dict[str, int] = {
@@ -96,10 +97,12 @@ def _build_haversine_matrix(
             if i == j:
                 row.append(0)
             else:
-                dist_km = _haversine_km(coords[i][0], coords[i][1], coords[j][0], coords[j][1])
+                dist_km = _haversine_km(
+                    coords[i][0], coords[i][1], coords[j][0], coords[j][1])
                 raw_time = max(1, round((dist_km / speed) * 60))
                 if j != 0 and raw_time > max_travel_min:
-                    row.append(raw_time + max_travel_min * _LONG_ARC_PENALTY_MULTIPLIER)
+                    row.append(raw_time + max_travel_min *
+                               _LONG_ARC_PENALTY_MULTIPLIER)
                 else:
                     row.append(raw_time)
         matrix.append(row)
@@ -107,7 +110,8 @@ def _build_haversine_matrix(
 
 
 def _dwell_minutes(place: PlaceRecord) -> int:
-    times = [_TAG_DWELL_MINUTES[t] for t in (place.get("tags") or []) if t in _TAG_DWELL_MINUTES]
+    times = [_TAG_DWELL_MINUTES[t]
+             for t in (place.get("tags") or []) if t in _TAG_DWELL_MINUTES]
     return max(times) if times else _DEFAULT_DWELL_MINUTES
 
 
@@ -225,7 +229,8 @@ def _nearest_neighbor_order(
         travel_times = [
             _travel_minutes(
                 last.get("latitude", 0.0), last.get("longitude", 0.0),
-                remaining[i].get("latitude", 0.0), remaining[i].get("longitude", 0.0),
+                remaining[i].get("latitude", 0.0), remaining[i].get(
+                    "longitude", 0.0),
                 mode,
             )
             for i in range(len(remaining))
@@ -345,14 +350,16 @@ def _greedy_fallback(candidates: list[PlaceRecord], trip_context: dict) -> list[
 
     days_out = []
     for day_idx in range(trip_days):
-        day_places = candidates[day_idx * max_per_day: (day_idx + 1) * max_per_day]
+        day_places = candidates[day_idx *
+                                max_per_day: (day_idx + 1) * max_per_day]
         if not day_places:
             break
         if hotel_loc:
             day_places = sorted(
                 day_places,
                 key=lambda p: _haversine_km(
-                    float(hotel_loc["latitude"]), float(hotel_loc["longitude"]),
+                    float(hotel_loc["latitude"]), float(
+                        hotel_loc["longitude"]),
                     p.get("latitude", 0.0), p.get("longitude", 0.0),
                 ),
             )
@@ -383,10 +390,10 @@ def _ensure_food_stop(
 
     for day in range(trip_days):
         day_start = day * slots_per_day
-        day_end   = day_start + slots_per_day
+        day_end = day_start + slots_per_day
         day_slice = candidates[day_start:day_end]
 
-        food_idxs     = [i for i, p in enumerate(day_slice) if _is_food(p)]
+        food_idxs = [i for i, p in enumerate(day_slice) if _is_food(p)]
         non_food_idxs = [i for i, p in enumerate(day_slice) if not _is_food(p)]
 
         # --- cap: remove excess food stops above max_food ---
@@ -418,7 +425,8 @@ def _ensure_food_stop(
             )
             if food_place and non_food_idxs:
                 replace_i = non_food_idxs[-1]  # lowest-ranked non-food
-                used_ids.discard(candidates[day_start + replace_i].get("place_id"))
+                used_ids.discard(
+                    candidates[day_start + replace_i].get("place_id"))
                 candidates[day_start + replace_i] = food_place
                 used_ids.add(food_place.get("place_id"))
                 logger.info("Injected food stop '%s' into day %d.",
@@ -495,7 +503,8 @@ class RouteOptimizer:
         max_travel_min = _parse_max_travel_minutes(
             trip_context.get("max_travel_minutes", "> 40"))
 
-        candidates = _candidate_pool(ranked_places, max_per_day, trip_days, pace)
+        candidates = _candidate_pool(
+            ranked_places, max_per_day, trip_days, pace)
         candidates = [p for p in candidates if _arrival_window(p) is not None]
         if not candidates:
             return []
@@ -508,8 +517,8 @@ class RouteOptimizer:
             depot_lat = float(hotel_loc["latitude"])
             depot_lon = float(hotel_loc["longitude"])
         else:
-            all_lats  = [p.get("latitude", 0.0) for p in candidates]
-            all_lons  = [p.get("longitude", 0.0) for p in candidates]
+            all_lats = [p.get("latitude", 0.0) for p in candidates]
+            all_lons = [p.get("longitude", 0.0) for p in candidates]
             depot_lat = sum(all_lats) / len(all_lats)
             depot_lon = sum(all_lons) / len(all_lons)
 
@@ -517,20 +526,25 @@ class RouteOptimizer:
                                                        0.0), p.get("longitude", 0.0)) for p in candidates]
         n = len(locations)
 
-        fallback_enabled = os.getenv("AZURE_MATRIX_FALLBACK_ENABLED", "true").lower() == "true"
+        fallback_enabled = os.getenv(
+            "AZURE_MATRIX_FALLBACK_ENABLED", "true").lower() == "true"
         try:
             raw_matrix = _azure_build_time_matrix(locations, mode)
             time_matrix = [row[:] for row in raw_matrix]
             for i in range(n):
                 for j in range(n):
                     if i != j and j != 0 and time_matrix[i][j] > max_travel_min:
-                        time_matrix[i][j] += max_travel_min * _LONG_ARC_PENALTY_MULTIPLIER
+                        time_matrix[i][j] += max_travel_min * \
+                            _LONG_ARC_PENALTY_MULTIPLIER
         except UnsupportedTravelModeError:
-            time_matrix = _build_haversine_matrix(locations, mode, max_travel_min)
+            time_matrix = _build_haversine_matrix(
+                locations, mode, max_travel_min)
         except AzureMapsError as e:
             if fallback_enabled:
-                logger.warning("Azure matrix unavailable (%s), falling back to haversine", e)
-                time_matrix = _build_haversine_matrix(locations, mode, max_travel_min)
+                logger.warning(
+                    "Azure matrix unavailable (%s), falling back to haversine", e)
+                time_matrix = _build_haversine_matrix(
+                    locations, mode, max_travel_min)
             else:
                 raise
 
@@ -540,7 +554,8 @@ class RouteOptimizer:
         for p in candidates:
             window = _arrival_window(p)
             if window is None:
-                logger.warning("Skipping impossible time window for %s", p.get("name"))
+                logger.warning(
+                    "Skipping impossible time window for %s", p.get("name"))
                 continue
             time_windows.append(window)
 
@@ -607,7 +622,7 @@ class RouteOptimizer:
 
         if not solution:
             logger.warning(
-                "OR-Tools returned no solution — falling back to greedy ordering.")
+                "OR-Tools returned no solution, falling back to greedy ordering.")
             return _greedy_fallback(candidates, trip_context)
 
         days_out = self._extract_solution(
@@ -616,7 +631,7 @@ class RouteOptimizer:
         )
         if not days_out:
             logger.warning(
-                "OR-Tools dropped all nodes (trivial solution) — falling back to greedy ordering.")
+                "OR-Tools dropped all nodes (trivial solution, falling back to greedy ordering.")
             return _greedy_fallback(candidates, trip_context)
         return days_out
 

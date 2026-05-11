@@ -40,18 +40,26 @@ class MLPipeline:
     def run_stage1(self, places: list[PlaceRecord]) -> list[PlaceRecord]:
         from ml.services.llm_tagger import tag_untagged_places
         logger.info("Stage 1: tagging %d places", len(places))
+        tag_db = self.user_profiler.place_tag_db
         tagged = []
+        cache_hits = 0
         for p in places:
+            pid = str(p.get("place_id") or "")
             if p.get("tags"):
                 tagged.append(p)
+            elif pid and pid in tag_db:
+                tagged.append({**p, "tags": tag_db[pid]})
+                cache_hits += 1
             else:
                 tags = [tag for tag, val in rule_based_labels(p).items() if val == 1]
                 tagged.append({**p, "tags": tags})
+        if cache_hits:
+            logger.info("Stage 1: %d / %d places served from tag cache", cache_hits, len(places))
         tagged = tag_untagged_places(tagged)
         for p in tagged:
             pid = str(p.get("place_id") or "")
             if pid and p.get("tags"):
-                self.user_profiler.place_tag_db[pid] = p["tags"]
+                tag_db[pid] = p["tags"]
         return tagged
 
     def train_stage2(

@@ -67,7 +67,7 @@ def tag_untagged_places(places: list[PlaceRecord]) -> list[PlaceRecord]:
 
     Returns the full list with LLM tags merged in for previously untagged places.
     """
-    untagged_indices = [i for i, p in enumerate(places) if not p.get("tags")]
+    untagged_indices = [i for i, p in enumerate(places) if len(p.get("tags") or []) < 2]
     if not untagged_indices:
         return places
 
