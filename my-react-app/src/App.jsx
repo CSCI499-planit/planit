@@ -12,7 +12,8 @@ import Navbar         from './pages/navbar'
 import HomePage       from './pages/home'
 import ProfilePage    from './pages/profile'
 import DestinationPage from './pages/destination'
-import GeneratePage   from './pages/generate'
+import GenerateItinerary from './pages/generate-itinerary'
+import GeneratePlaces from './pages/generate-places'
 
 export const DarkModeContext = React.createContext()
 
@@ -26,7 +27,10 @@ function AppLayout() {
 
   return (
     <DarkModeContext.Provider value={{ darkMode, setDarkMode }}>
-      <div className={darkMode ? 'dark-mode' : ''}>
+      <div
+        className={darkMode ? 'dark-mode' : ''}
+        style={{ background: '#ffffffff', minHeight: '100vh' }}
+      >
         <Navbar />
         <Outlet />
       </div>
@@ -34,18 +38,18 @@ function AppLayout() {
   )
 }
 
-function WakeServices() {
-  useEffect(() => {
-    fetch(import.meta.env.VITE_API_BASE_URL + '/user/signin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {})
-    fetch(import.meta.env.VITE_ML_SERVICE_URL).catch(() => {})
-  }, [])
-  return null
-}
+// function WakeServices() {
+//   useEffect(() => {
+//     fetch(import.meta.env.VITE_API_BASE_URL + '/user/signin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {})
+//     fetch(import.meta.env.VITE_ML_SERVICE_URL).catch(() => {})
+//   }, [])
+//   return null
+// }
 
 export default function App() {
   return (
     <AuthProvider>
-      <WakeServices />
+      {/* <WakeServices /> */}
       <Routes>
         <Route path="/"       element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />
@@ -60,7 +64,8 @@ export default function App() {
           <Route path="/app" element={<AppLayout />}>
             <Route index        element={<HomePage />} />
             <Route path="home"  element={<HomePage />} />
-            <Route path="generate" element={<GeneratePage />} />
+            <Route path="generate-itinerary" element={<GenerateItinerary />} />
+            <Route path="generate-places" element={<GeneratePlaces />} />
             <Route path="destination" element={<DestinationPage />} />
             <Route path="profile"     element={<ProfilePage />} />
           </Route>

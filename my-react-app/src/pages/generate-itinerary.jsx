@@ -427,7 +427,7 @@ useEffect(() => {
     const progress =
       max > 0 ? scrollY / max : 0
 
-    const hue = 200 + progress * 40
+    const hue = 200 + progress * 100
 
     const el = document.querySelector(
       '.generate-page'
@@ -681,18 +681,8 @@ useEffect(() => {
                     key={day.day}
                     dayData={day}
                     feedback={feedback[day.day]}
-                    onLike={() =>
-                      handleFeedback(
-                        day.day,
-                        'like'
-                      )
-                    }
-                    onDislike={() =>
-                      handleFeedback(
-                        day.day,
-                        'dislike'
-                      )
-                    }
+                    onLike={() => handleFeedback(day.day, 'like')}
+                    onDislike={() => handleFeedback(day.day, 'dislike')}
                   />
                 ))}
               </>
