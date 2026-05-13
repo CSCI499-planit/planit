@@ -1,6 +1,104 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { userStorage } from '../utils/userStorage'
 import '../components/generate.css'
+
+const PLACES_PER_PAGE = 10
+
+function getPlaceId(place) {
+  return (
+    place.place_id ||
+    place.id ||
+    `${place.name}-${place.latitude}-${place.longitude}`
+  )
+}
+
+function getLocationKey(location) {
+  return location.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function getShownPlaceIds(location) {
+  const shownByLocation = userStorage.get('shownGeneratedPlaces') || {}
+  return shownByLocation[getLocationKey(location)] || []
+}
+
+function rememberShownPlaces(location, nextPlaces) {
+  const key = getLocationKey(location)
+  const shownByLocation = userStorage.get('shownGeneratedPlaces') || {}
+  const existing = shownByLocation[key] || []
+  const nextIds = nextPlaces.map(getPlaceId).filter(Boolean)
+
+  userStorage.set('shownGeneratedPlaces', {
+    ...shownByLocation,
+    [key]: [...new Set([...existing, ...nextIds])].slice(-250),
+  })
+}
+
+function getDisplayAddress(place) {
+  return (
+    [
+      place.street,
+      place.suburb || place.district,
+      place.city,
+      place.state,
+    ]
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(', ') ||
+    place.address?.split(',').slice(0, 3).join(',') ||
+    ''
+  )
+}
+
+function getPlaceLocationLabel(place, locationQuery) {
+  return (
+    [place.city, place.state || place.country]
+      .filter(Boolean)
+      .join(', ') ||
+    place.address ||
+    locationQuery
+  )
+}
+
+function toLikedDestination(place, locationQuery) {
+  return {
+    id: getPlaceId(place),
+    name: place.name || 'Unnamed place',
+    country: getPlaceLocationLabel(place, locationQuery),
+    locationQuery,
+    source: 'generated_place',
+    place_id: place.place_id,
+    city: place.city,
+    state: place.state,
+    address: place.address,
+    latitude: place.latitude,
+    longitude: place.longitude,
+    rating: place.rating,
+    tags: place.tags || place.categories || [],
+  }
+}
+
+function openPlaceInGoogleMaps(place) {
+  const query = [
+    place.name,
+    getDisplayAddress(place),
+    place.city,
+    place.state,
+  ]
+    .filter(Boolean)
+    .join(', ') || (
+    place.latitude && place.longitude
+      ? `${place.latitude},${place.longitude}`
+      : ''
+  )
+
+  if (!query) return
+
+  window.open(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`,
+    '_blank'
+  )
+}
 
 function PriceLevel({ level }) {
   if (!level) return null
@@ -25,20 +123,10 @@ function PlaceCard({
   onLike,
   onDislike,
 }) {
-  const displayAddr =
-    [
-      place.street,
-      place.suburb || place.district,
-      place.city,
-      place.state,
-    ]
-      .filter(Boolean)
-      .slice(0, 3)
-      .join(', ') ||
-    place.address?.split(',').slice(0, 3).join(',')
+  const displayAddr = getDisplayAddress(place)
 
   return (
-    <div className="stop-card">
+    <div className="stop-card place-card">
 
       <div className="stop-card__top">
         <div>
@@ -50,25 +138,15 @@ function PlaceCard({
             <PriceLevel level={place.price_level} />
           </div>
         </div>
-      </div>
 
-      {displayAddr && (
-        <div className="stop-card__address">
-          {displayAddr}
-        </div>
-      )}
+      <div className="stop-card__actions">
 
-      {place.tags?.length > 0 && (
-        <div className="stop-card__tags">
-          {place.tags.map(tag => (
-            <span key={tag} className="stop-tag">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="day-card__actions">
+        <button
+          className="gmaps-btn"
+          onClick={() => openPlaceInGoogleMaps(place)}
+        >
+          Open in Google Maps
+        </button>
 
         <button
           className={`feedback-btn feedback-btn--like ${
@@ -91,6 +169,23 @@ function PlaceCard({
         </button>
 
       </div>
+      </div>
+
+      {displayAddr && (
+        <div className="stop-card__address">
+          {displayAddr}
+        </div>
+      )}
+
+      {place.tags?.length > 0 && (
+        <div className="stop-card__tags">
+          {place.tags.map(tag => (
+            <span key={tag} className="stop-tag">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -138,33 +233,82 @@ export default function GeneratePlacesPage() {
     setTimeout(() => setToast(''), 2800)
   }
 
-  const handleSubmit = e => {
+  const handleSubmit = async e => {
     e.preventDefault()
     setLoading(true)
     setError('')
     setPlaces([])
+    setFeedback({})
 
-    setTimeout(() => {
-      setPlaces([
-        {
-          id: Date.now(),
-          name: 'Testing',
-          city: 'Brooklyn',
-          state: 'NY',
-          address: 'Testing',
-          price_level: 2,
-          tags: ['cafe', 'coffee'],
-        },
-      ])
+    try {
+      const localExcluded = getShownPlaceIds(location)
+      const data = await api.post('/recommend/places', {
+        location,
+        top_k: PLACES_PER_PAGE,
+        radius_m: 5000,
+        limit: 100,
+        excluded_place_ids: localExcluded,
+      })
+
+      const seen = new Set(localExcluded)
+      const nextPlaces = (data.places || [])
+        .filter(place => {
+          const placeId = getPlaceId(place)
+          if (!placeId || seen.has(placeId)) return false
+          seen.add(placeId)
+          return true
+        })
+        .slice(0, PLACES_PER_PAGE)
+
+      setPlaces(nextPlaces)
+      rememberShownPlaces(location, nextPlaces)
+
+      if (nextPlaces.length === 0) {
+        setError('No new places found. Try a nearby neighborhood or a wider destination.')
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to discover places')
+    } finally {
       setLoading(false)
-    }, 900)
+    }
   }
 
-  const handleFeedback = (place, type) => {
-    if (feedback[place.id]) return
+  const handleFeedback = async (place, type) => {
+    const placeId = getPlaceId(place)
 
-    setFeedback(prev => ({ ...prev, [place.id]: type }))
-    showToast(type === 'like' ? 'Liked!' : 'Feedback noted!')
+    if (feedback[placeId]) return
+
+    try {
+      await api.post('/interactions/', {
+        place_id: placeId,
+        event_type: type === 'like' ? 'like' : 'unlike',
+      })
+    } catch {
+      showToast("Couldn't save feedback. Try again.")
+      return
+    }
+
+    setFeedback(prev => ({ ...prev, [placeId]: type }))
+    rememberShownPlaces(location, [place])
+
+    if (type === 'like') {
+      const likedPlace = toLikedDestination(place, location)
+      const existing = userStorage.get('likedDestinations') || []
+      const withoutDuplicate = existing.filter(
+        dest => dest.id !== likedPlace.id
+      )
+
+      userStorage.set('likedDestinations', [
+        likedPlace,
+        ...withoutDuplicate,
+      ])
+
+      showToast('Place saved to Liked Destinations!')
+      return
+    }
+
+    setPlaces(prev => prev.filter(item => getPlaceId(item) !== placeId))
+    showToast("Feedback noted. We'll skip it next time.")
   }
 
   return (
@@ -228,9 +372,9 @@ export default function GeneratePlacesPage() {
             <div className="places-grid">
               {places.map(place => (
                 <PlaceCard
-                  key={place.id}
+                  key={getPlaceId(place)}
                   place={place}
-                  feedback={feedback[place.id]}
+                  feedback={feedback[getPlaceId(place)]}
                   onLike={() => handleFeedback(place, 'like')}
                   onDislike={() => handleFeedback(place, 'dislike')}
                 />

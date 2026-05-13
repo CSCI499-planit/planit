@@ -20,6 +20,7 @@ export default function SigninPage() {
     try {
       const data = await api.post('/user/signin', { email, password })
       login(data)
+      api.get('/wake/session').catch(() => {})
       navigate('/app/home')
     } catch (err) {
       setError(err.message ?? 'Sign in failed. Check your email and password.')

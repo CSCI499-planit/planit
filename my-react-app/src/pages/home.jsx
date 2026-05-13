@@ -14,7 +14,6 @@ function openInGoogleMaps(stops) {
 
   const origin = coords[0]
   const destination = coords[coords.length - 1]
-  const [confirmPlace, setConfirmPlace] = useState(null)
   const waypoints = coords
     .slice(1, -1)
     .slice(0, 8)
@@ -25,6 +24,29 @@ function openInGoogleMaps(stops) {
   }&travelmode=driving`
 
   window.open(url, '_blank')
+}
+
+function openDestinationInGoogleMaps(dest) {
+  const query = [
+    dest.name,
+    dest.address,
+    dest.city,
+    dest.state,
+    dest.country || dest.locationQuery,
+  ]
+    .filter(Boolean)
+    .join(', ') || (
+    dest.latitude && dest.longitude
+      ? `${dest.latitude},${dest.longitude}`
+      : ''
+  )
+
+  if (!query) return
+
+  window.open(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`,
+    '_blank'
+  )
 }
 
 function SavedItineraryCard({ entry, onDelete }) {
@@ -114,12 +136,22 @@ function SavedItineraryCard({ entry, onDelete }) {
           {entry.tripDays !== 1 ? 's' : ''} · {allStops.length} stops
         </span>
 
-        <button
-          className="saved-card__delete"
-          onClick={() => setConfirm(true)}
-        >
-          Remove
-        </button>
+        <div className="saved-card__actions">
+          <button
+            className="gmaps-btn"
+            onClick={() => openInGoogleMaps(allStops)}
+            disabled={allStops.length === 0}
+          >
+            Open Trip in Google Maps
+          </button>
+
+          <button
+            className="saved-card__delete"
+            onClick={() => setConfirm(true)}
+          >
+            Remove
+          </button>
+        </div>
       </div>
 
       {confirm && (
@@ -148,10 +180,6 @@ export default function HomePage() {
     () => userStorage.get('likedDestinations') || []
   )
 
-  const [savedPlaces, setSavedPlaces] = useState(
-    () => userStorage.get('savedPlaces') || []
-  )
-
   const [confirmDest, setConfirmDest] = useState(null)
 
   const deleteItinerary = id => {
@@ -166,13 +194,6 @@ export default function HomePage() {
     userStorage.set('likedDestinations', updated)
     setConfirmDest(null)
   }
-
-  const removeSavedPlace = id => {
-  const updated = savedPlaces.filter(p => p.id !== id)
-  setSavedPlaces(updated)
-  userStorage.set('savedPlaces', updated)
-  setConfirmPlace(null)
-}
 
   const firstName = user?.name?.split(' ')[0] || 'Traveler'
 
@@ -252,39 +273,6 @@ export default function HomePage() {
         </div>
       )}
 
-      <h2 className="section-title">Saved Places</h2>
-
-      {savedPlaces.length === 0 ? (
-        <p className="section-empty">
-          No saved places yet; discover places and save them here!
-        </p>
-      ) : (
-        <div className="dest-list-home">
-          {savedPlaces.map(place => (
-            <div key={place.id} className="dest-chip">
-              <div className="dest-chip__left">
-                <div>
-                  <div className="dest-chip__name">
-                    {place.name}
-                  </div>
-
-                  <div className="dest-chip__country">
-                    {place.locationQuery || place.city || 'Place'}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                className="dest-chip__remove"
-                onClick={() => removeSavedPlace(place.id)}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
       <h2 className="section-title">Liked Destinations</h2>
 
       {likedDests.length === 0 ? (
@@ -307,12 +295,21 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <button
-                className="dest-chip__remove"
-                onClick={() => setConfirmDest(dest)}
-              >
-                Remove
-              </button>
+              <div className="dest-chip__actions">
+                <button
+                  className="gmaps-btn"
+                  onClick={() => openDestinationInGoogleMaps(dest)}
+                >
+                  Open in Google Maps
+                </button>
+
+                <button
+                  className="dest-chip__remove"
+                  onClick={() => setConfirmDest(dest)}
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
         </div>

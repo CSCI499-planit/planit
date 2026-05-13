@@ -162,11 +162,37 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .saved-card__days {
   font-size: 0.78rem;
   color: #64748b;
+}
+
+.saved-card__actions,
+.dest-chip__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.saved-card__actions .gmaps-btn,
+.dest-chip__actions .gmaps-btn {
+  background: #f8fafc;
+  border-color: rgba(26, 115, 232, 0.28);
+  color: #1a73e8;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.7rem;
+}
+
+.saved-card__actions .gmaps-btn:hover,
+.dest-chip__actions .gmaps-btn:hover {
+  background: #eef5ff;
+  border-color: rgba(26, 115, 232, 0.45);
+  color: #1558b0;
 }
 
 .saved-card__delete {
@@ -234,6 +260,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -280,3 +307,17 @@
 }
 
 .dest-chip__remove:hover { color: #e11d48; }
+
+@media (max-width: 640px) {
+  .home__actions,
+  .dest-chip,
+  .saved-card__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .saved-card__actions,
+  .dest-chip__actions {
+    justify-content: flex-start;
+  }
+}

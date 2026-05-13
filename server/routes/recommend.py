@@ -7,6 +7,7 @@
     to the ML recommendation/itinerary endpoints.
 """
 import os
+import logging
 from typing import Optional
 
 import httpx
@@ -20,6 +21,7 @@ from server.controllers.interactions import EVENT_RATINGS
 router = APIRouter(prefix="/recommend", tags=["recommend"])
 
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://localhost:8001").rstrip("/")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +160,37 @@ def _fetch_places_with_novelty(
     if len(fresh) < fresh_target:
         # retry 2: double the limit AND expand radius by 50 %
         places = _fetch_places(location, int(radius_m * 1.5), min(limit * 2, 200))
+        fresh  = [p for p in places if p.get("place_id") not in excluded_set]
 
-    return places
+    return fresh
+
+
+def _log_recommendation_impressions(
+    user_id: str,
+    places: list[dict],
+    client: Client,
+) -> None:
+    if not places:
+        return
+
+    rows = [
+        {
+            "user_id":       user_id,
+            "place_id":      place.get("place_id"),
+            "rank_position": position,
+            "features":      place.get("score_breakdown") or {},
+            "final_score":   place.get("score", 0.0),
+        }
+        for position, place in enumerate(places)
+        if place.get("place_id")
+    ]
+    if not rows:
+        return
+
+    try:
+        client.table("recommendation_logs").insert(rows).execute()
+    except Exception as exc:
+        logger.warning("recommendation impression logging failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +198,11 @@ def _fetch_places_with_novelty(
 # ---------------------------------------------------------------------------
 
 class PlacesRequest(BaseModel):
-    location:  str
-    top_k:     int = 20
-    radius_m:  int = 5000
-    limit:     int = 50
+    location:           str
+    top_k:              int = 20
+    radius_m:           int = 5000
+    limit:              int = 50
+    excluded_place_ids: list[str] = []
 
 
 class HotelLocation(BaseModel):
@@ -186,6 +218,7 @@ class ItineraryRequest(BaseModel):
     top_k:          int = 20
     radius_m:       int = 5000
     limit:          int = 50
+    excluded_place_ids: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +242,13 @@ async def recommend_places(
 
     preference       = _fetch_user_preference(user_id, client)
     visits, excluded = _fetch_user_history(user_id, client)
+    excluded = list(set(excluded) | set(body.excluded_place_ids))
     places           = _fetch_places_with_novelty(body.location, body.radius_m, body.limit, excluded, body.top_k)
+    if not places:
+        raise HTTPException(
+            status_code=404,
+            detail="No new places found for this destination. Try a nearby neighborhood or a wider destination.",
+        )
 
     ml_body = {
         "preference":         preference,
@@ -218,7 +257,13 @@ async def recommend_places(
         "excluded_place_ids": excluded,
         "top_k":              body.top_k,
     }
-    return _ml_post("/recommend", ml_body)
+    result = _ml_post("/recommend", ml_body)
+    _log_recommendation_impressions(
+        user_id,
+        result.get("places", []),
+        client,
+    )
+    return result
 
 
 @router.post("/itinerary")
@@ -239,7 +284,13 @@ async def recommend_itinerary(
 
     preference       = _fetch_user_preference(user_id, client)
     visits, excluded = _fetch_user_history(user_id, client)
+    excluded = list(set(excluded) | set(body.excluded_place_ids))
     places           = _fetch_places_with_novelty(body.location, body.radius_m, body.limit, excluded, body.top_k)
+    if not places:
+        raise HTTPException(
+            status_code=404,
+            detail="No new places found for this destination. Try a nearby neighborhood or a wider destination.",
+        )
 
     ml_body = {
         "preference":         preference,
@@ -251,4 +302,14 @@ async def recommend_itinerary(
         "start_date":         body.start_date,
         "hotel_location":     body.hotel_location.model_dump() if body.hotel_location else None,
     }
-    return _ml_post("/itinerary", ml_body)
+    result = _ml_post("/itinerary", ml_body)
+    _log_recommendation_impressions(
+        user_id,
+        [
+            stop.get("place", {})
+            for day in result.get("itinerary", [])
+            for stop in day.get("stops", [])
+        ],
+        client,
+    )
+    return result

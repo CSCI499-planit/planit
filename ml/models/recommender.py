@@ -192,10 +192,12 @@ class HybridRecommender:
         excluded_ids:      set[str] | None = None,
     ) -> list[PlaceRecord]:
         excluded_ids = excluded_ids or set()
+        candidate_places = [
+            place for place in places
+            if place.get("place_id") not in excluded_ids
+        ]
         scored: list[tuple[float, PlaceRecord, dict]] = []
-        for place in places:
-            if place.get("place_id") in excluded_ids:
-                continue
+        for place in candidate_places:
             bd = self._score_place_with_breakdown(
                 user_embedding, place, preference)
             if bd["score"] > 0.0:
@@ -206,7 +208,7 @@ class HybridRecommender:
         if not scored:
             logger.info(
                 "All places filtered or zero-scored — using popularity fallback.")
-            return self.popularity_fallback(places, top_k)
+            return self.popularity_fallback(candidate_places, top_k)
 
         exploration = int(preference.get("exploration_score") or 3)
         ranked = self._rerank_for_diversity(scored, exploration, top_k)

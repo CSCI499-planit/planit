@@ -11,8 +11,12 @@ services:
         sync: false
       - key: PRODUCTION_URL
         sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
       - key: ML_SERVICE_URL
         sync: false
+      - key: WAKE_COOLDOWN_SECONDS
+        value: 60
 
   - type: web
     name: planit-ml
