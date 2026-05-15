@@ -202,6 +202,7 @@ export default function SurveyPage() {
         </div>
       </div>
 
+{/* Additions: can add subtexts for questions that are multi-select*/}
       <div className="survey-container">
         <h1>Personalize Your Experience</h1>
           <p className="survey-subtitle">

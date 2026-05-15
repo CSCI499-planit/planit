@@ -59,7 +59,7 @@ body {
   z-index: 2;
   position: relative;
   text-align: center;
-  justify-content: content;
+  justify-content: center;
 }
 
 .hero__headline {
