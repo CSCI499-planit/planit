@@ -180,12 +180,22 @@ export default function UploadPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="upload-form">
+              <div className="file-input-wrapper">
               <input
                 type="file"
+                id="file"
+                className="file-input"
                 accept=".json"
                 multiple
                 onChange={handleFileChange}
               />
+
+            <label htmlFor="file" className="file-label">
+                <div className="upload-icon">📁</div>
+                <p className="upload-main">Click to upload files</p>
+                <p className="upload-sub">Reviews.json & Saved Places.json</p>
+              </label>
+            </div>
 
               {files.length > 0 && (
                 <ul className="file-name">

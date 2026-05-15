@@ -1,66 +1,100 @@
 .upload-page {
-  min-height: 100vh;
-  background: #eef4f8;
+  /* background: #eef4f8; */
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
-  font-family: 'DM Sans', sans-serif;
+  padding: 5rem 3rem;
+  min-height: 100vh;
+  position: relative;
+  background:
+  linear-gradient(
+    180deg,
+    rgba(3, 8, 15, 0.82) 0%,
+    rgba(7, 15, 25, 0.72) 40%,
+    rgba(10, 18, 30, 0.88) 100%
+  ),
+  url('/partofglobe3.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.upload-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top left, rgba(0, 225, 255, 0.10), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(87, 108, 255, 0.08), transparent 40%);
+  pointer-events: none;
 }
 
 .upload-container {
-  background: #ffffff;
-  border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
-  border: 1px solid #e2e8f0;
-  max-width: 600px;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(120, 200, 255, 0.14);
+  border-radius: 24px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(0, 183, 255, 0.08);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #f3f8ff;
+  max-width: 800px;
   width: 100%;
   overflow: hidden;
+
+  animation: fadeUp 0.6s ease;
 }
 
 .upload-header {
-  background: #0f172a;
+  background: transparent;
   color: #ffffff;
-  padding: 2rem;
+  padding: 2.2rem 2.5rem 1.2rem;
   text-align: center;
 }
 
 .upload-header h1 {
   margin: 0;
-  font-size: 1.8rem;
+  font-size: clamp(2rem, 3vw, 3rem);
   margin-bottom: 0.5rem;
   font-weight: 600;
+  color: #f3f8ff;
 }
 
 .upload-header p {
   margin: 0;
   font-size: 0.95rem;
-  color: #94a3b8;
+  color: rgba(220, 233, 245, 0.72);
 }
 
 .upload-content {
-  padding: 2rem;
+  padding: 1.2rem 2.5rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
 }
 
 .upload-info {
-  margin-bottom: 2rem;
-  background: #f1f5f9;
+  margin-bottom: 0rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   padding: 1.5rem;
-  border-radius: 12px;
-  border-left: 4px solid #334155;
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
 }
 
 .upload-info h3 {
-  margin-top: 0;
-  color: #0f172a;
+  color: white;
   font-size: 1rem;
   font-weight: 600;
+  margin-bottom: 0.75rem;
 }
 
 .upload-info ol {
   margin: 1rem 0 0 1.5rem;
   padding: 0;
-  color: #334155;
+  color: rgba(255,255,255,0.75);
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -70,9 +104,13 @@
 }
 
 .upload-info a {
-  color: #334155;
+  color: #22cdd6;
   text-decoration: underline;
   font-weight: 500;
+}
+
+.upload-info a:hover {
+  color: #d0f1fb;
 }
 
 .upload-info code {
@@ -81,7 +119,6 @@
   border-radius: 6px;
   font-family: monospace;
   font-size: 0.85rem;
-  color: #0f172a;
 }
 
 .file-upload-area {
@@ -98,18 +135,21 @@
 
 .file-label {
   display: block;
-  border: 2px dashed #cbd5e1;
-  border-radius: 12px;
+  border: 1px dashed rgba(255,255,255,0.25);
+  border-radius: 18px;
   padding: 3rem 2rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.02);
 }
 
 .file-label:hover {
-  border-color: #334155;
-  background: #f1f5f9;
+  border-color: #67d3ff;
+  box-shadow:
+    0 0 18px rgba(103, 211, 255, 0.12);
+  background: rgba(34, 205, 214, 0.06);
+  transform: translateY(-2px);
 }
 
 .file-input:disabled ~ .file-label {
@@ -120,7 +160,7 @@
 .upload-icon {
   font-size: 2rem;
   margin-bottom: 0.5rem;
-  color: #0f172a;
+  color: #22cdd6;
 }
 
 .upload-text {
@@ -130,20 +170,34 @@
 .upload-main {
   margin: 0.5rem 0 0.25rem 0;
   font-weight: 600;
-  color: #0f172a;
+  color: white;
   font-size: 0.95rem;
 }
 
 .upload-sub {
   margin: 0;
-  color: #64748b;
+  color: rgba(255,255,255,0.6);
   font-size: 0.85rem;
 }
 
 .file-name {
-  margin: 0.5rem 0 0.25rem 0;
-  font-weight: 600;
-  color: #0f172a;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: rgba(255,255,255,0.75);
+  font-size: 0.9rem;
+}
+
+.file-name li{
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.75);
 }
 
 .file-size {
@@ -184,38 +238,42 @@
   transition: all 0.2s ease;
 }
 
-.btn--primary {
-  background: #0f172a;
-  color: white;
+.upload-page .btn--primary {
+  background: linear-gradient(135deg, #22d3ee, #06b6d4);
+  color: #081018;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 10px 30px rgba(34, 205, 214, 0.05);
+  transition: all 0.2s ease;
 }
 
-.btn--primary:hover:not(:disabled) {
+.upload-page .btn--primary:hover:not(:disabled) {
+  background: rgba(15, 94, 114, 0.9);
+  color: rgb(213, 212, 212);
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
 }
 
-.btn--primary:disabled {
+.upload-page .btn--primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.btn--secondary {
-  background: white;
-  color: #0f172a;
-  border: 2px solid #e2e8f0;
+.upload-page .btn--secondary {
+  background: black;
+  color: rgba(255,255,255,0.85);
+  border: 1px solid rgba(255,255,255,0.12);
 }
 
-.btn--secondary:hover:not(:disabled) {
-  background: #f1f5f9;
+.upload-page .btn--secondary:hover:not(:disabled) {
+  background: rgba(255,255,255,0.08);
 }
 
-.btn--secondary:disabled {
+.upload-page .btn--secondary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
 .upload-note {
-  background: #f1f5f9;
   padding: 1rem;
   border-radius: 8px;
   border-left: 4px solid #64748b;
@@ -231,14 +289,12 @@
 .upload-success {
   padding: 3rem 2rem;
   text-align: center;
-  color: #0f172a;
 }
 
 .success-icon {
   font-size: 3rem;
   margin-bottom: 1rem;
   animation: pop 0.5s ease;
-  color: #0f172a;
 }
 
 @keyframes pop {
@@ -249,7 +305,6 @@
 
 .upload-success h2 {
   margin: 1rem 0 0.5rem 0;
-  color: #0f172a;
   font-size: 1.5rem;
   font-weight: 600;
 }
@@ -322,13 +377,18 @@
 .guide-toggle {
   background: none;
   border: none;
-  color: #334155;
+  color: #22cdd6;
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
   text-decoration: underline;
   padding: 0;
   margin-left: 0.4rem;
+  transition: color 0.2s ease;
+}
+
+.guide-toggle:hover {
+  color: #d0f1fb;
 }
 
 .guide-img {
@@ -345,4 +405,15 @@
   color: var(--color-text-light);
   font-size: 0.9rem;
   line-height: 1.8;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
