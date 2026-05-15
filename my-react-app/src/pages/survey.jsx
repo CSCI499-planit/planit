@@ -2,6 +2,21 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import "../components/survey.css";
+import {
+  Trees,
+  Utensils,
+  Music2,
+  ShoppingBag,
+  Dumbbell,
+  Landmark,
+  Camera,
+  Mountain,
+  Users,
+  Heart,
+  PawPrint,
+  Gem,
+  Wallet,
+} from "lucide-react";
 
 export default function SurveyPage() {
   const navigate = useNavigate();
@@ -112,20 +127,20 @@ export default function SurveyPage() {
   };
 
   const interests = [
-    { id: "outdoor", label: "Outdoor adventures (hiking, parks, nature)" },
-    { id: "cultural", label: "Art, galleries, museums & cultural experiences" },
-    { id: "food_and_drink", label: "Restaurants, cafes, culinary spots" },
-    { id: "nightlife", label: "Bars, live music, comedy shows & nightlife" },
-    { id: "shopping", label: "Shopping, markets, thrift stores" },
-    { id: "wellness", label: "Fitness, meditation, yoga" },
-    { id: "historical", label: "History, architecture & heritage sites" },
-    { id: "scenic", label: "Scenic spots & viewpoints" },
-    { id: "adventurous", label: "Adventurous activities" },
-    { id: "family_friendly", label: "Family-friendly spots" },
-    { id: "romantic", label: "Romantic settings" },
-    { id: "pet_friendly", label: "Dog-friendly spaces" },
-    { id: "upscale", label: "Upscale & luxury places" },
-    { id: "budget_friendly", label: "Budget-friendly spots" },
+    { id: "outdoor", label: "Outdoor adventures (hiking, parks, nature)", icon: <Trees size={16} />},
+    { id: "cultural", label: "Art, galleries, museums & cultural experiences", icon: <Landmark size={16} />},
+    { id: "food_and_drink", label: "Restaurants, cafes, culinary spots", icon: <Utensils size={16} /> },
+    { id: "nightlife", label: "Bars, live music, comedy shows & nightlife", icon: <Music2 size={16} /> },
+    { id: "shopping", label: "Shopping, markets, thrift stores", icon: <ShoppingBag size={16} /> },
+    { id: "wellness", label: "Fitness, meditation, yoga", icon: <Dumbbell size={16} /> },
+    { id: "historical", label: "History, architecture & heritage sites", icon: <Camera size={16} /> },
+    { id: "scenic", label: "Scenic spots & viewpoints", icon: <Heart size={16} /> },
+    { id: "adventurous", label: "Adventurous activities", icon: <Mountain size={16} /> },
+    { id: "family_friendly", label: "Family-friendly spots", icon: <Users size={16} />  },
+    { id: "romantic", label: "Romantic settings", icon: <Heart size={16} /> },
+    { id: "pet_friendly", label: "Dog-friendly spaces", icon: <PawPrint size={16} /> },
+    { id: "upscale", label: "Upscale & luxury places", icon: <Gem size={16} /> },
+    { id: "budget_friendly", label: "Budget-friendly spots", icon: <Wallet size={16} /> },
   ];
 
   const cuisines = [
@@ -151,10 +166,47 @@ export default function SurveyPage() {
     "None",
   ];
 
+  const completedFields = [
+    answers.use_case,
+    answers.party_type,
+    answers.daily_budget_tier,
+    answers.trip_budget_tier,
+    answers.preferred_tags.length > 0,
+    answers.exploration_score,
+    answers.popularity_weight,
+    answers.cuisine_preferences.length > 0,
+    answers.dietary_restrictions.length > 0,
+    answers.travel_mode,
+    answers.max_travel_minutes,
+    answers.itinerary_pace,
+    answers.maps_history,
+  ].filter(Boolean).length;
+  
+  const totalFields = 13;
+  const progress = Math.round((completedFields / totalFields) * 100
+  );
+
   return (
     <div className="survey-page">
+      <div className="survey-progress-wrapper">
+        <div className="survey-progress-top">
+          <span>TRAVEL PROFILE</span>
+          <span>{progress}% COMPLETE</span>
+        </div>
+
+        <div className="survey-progress-bar">
+          <div
+            className="survey-progress-fill"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
       <div className="survey-container">
         <h1>Personalize Your Experience</h1>
+          <p className="survey-subtitle">
+            Set up your travel profile to allow personalized recommendations.
+          </p>
 
         <form onSubmit={handleSubmit} className="survey-form">
           {/* 1 */}
@@ -267,7 +319,10 @@ export default function SurveyPage() {
                     checked={answers.preferred_tags.includes(i.id)}
                     onChange={() => toggleList("preferred_tags", i.id)}
                   />
-                  <span>{i.label}</span>
+                  <>
+                    <span className="chip-icon">{i.icon}</span>
+                    <span>{i.label}</span>
+                  </>
                 </label>
               ))}
             </div>

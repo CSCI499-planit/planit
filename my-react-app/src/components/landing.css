@@ -183,9 +183,8 @@ body {
   border-radius: 50%;
   display: block;
 
-  /* combine entry + rotation */
   animation: globeIn 1s cubic-bezier(0.22,1,0.36,1) both,
-             spin 40s linear infinite; /* ← THIS controls speed */
+             spin 40s linear infinite;
 }
 
 /* Learn More Section */
