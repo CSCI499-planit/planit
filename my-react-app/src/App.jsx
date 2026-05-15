@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Outlet, Navigate } from "react-router-dom";
 import "./styles/index.css";
+import ScrollToTop from "./components/ScrollToTop";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import LandingPage from "./pages/landing";
@@ -48,6 +49,7 @@ export default function App() {
   return (
     <AuthProvider>
       <WakeServices />
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />

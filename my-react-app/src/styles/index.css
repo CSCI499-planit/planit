@@ -35,6 +35,10 @@ html, body, #root {
   width: 100%;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   /* font-family: "DM Sans", -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; */
   font-family: "Space Grotesk", sans-serif;
