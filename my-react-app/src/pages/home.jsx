@@ -208,120 +208,117 @@ export default function HomePage() {
 
   return (
     <div className="page">
-      <div className="home__hero">
-        <h1>
-          {greeting}, {firstName}
-        </h1>
+      <div className="home-container">
+        <div className="home__hero">
+          <h1>
+            {greeting}, {firstName}
+          </h1>
 
-        <p>
-          Ready for your next adventure? Let's make it unforgettable.
-        </p>
+          <p>
+            Ready for your next adventure? Let's make it unforgettable.
+          </p>
 
-        <div className="home__actions">
-          <button
-            className="btn btn--primary"
-            onClick={() => navigate('/app/generate-itinerary')}
-          >
-            Generate Itinerary
-          </button>
+          <div className="home__actions">
+            <button
+              className="btn btn--primary"
+              onClick={() => navigate('/app/generate-itinerary')}
+            >
+              Generate Itinerary
+            </button>
 
-          <button
-            className="btn btn--secondary"
-            onClick={() => navigate('/app/generate-places')}
-          >
-            Discover Places
-          </button>
+            <button
+              className="btn btn--secondary"
+              onClick={() => navigate('/app/generate-places')}
+            >
+              Discover Places
+            </button>
 
-          <button
-            className="btn btn--secondary"
-            onClick={() => navigate('/app/destination')}
-          >
-            Explore Destinations
-          </button>
-        </div>
-      </div>
-
-      <div className="stats-row">
-        {[
-          ['Countries', '20'],
-          ['Days Planned', '40'],
-          ['Spent This Year', '$2,300'],
-          ['Trips Done', '5'],
-        ].map(([label, val]) => (
-          <div className="stats-card" key={label}>
-            <span className="stats-card__val">{val}</span>
-            <span className="stats-card__label">{label}</span>
+            <button
+              className="btn btn--secondary"
+              onClick={() => navigate('/app/destination')}
+            >
+              Explore Destinations
+            </button>
           </div>
-        ))}
-      </div>
-
-      <h2 className="section-title">Saved Itineraries</h2>
-
-      {savedItineraries.length === 0 ? (
-        <p className="section-empty">
-          No saved itineraries yet — generate one and save it!
-        </p>
-      ) : (
-        <div className="saved-list">
-          {savedItineraries.map(entry => (
-            <SavedItineraryCard
-              key={entry.id}
-              entry={entry}
-              onDelete={deleteItinerary}
-            />
-          ))}
         </div>
-      )}
 
-      <h2 className="section-title">Liked Destinations</h2>
-
-      {likedDests.length === 0 ? (
-        <p className="section-empty">
-          No liked destinations yet; explore destinations to save them here!
-        </p>
-      ) : (
-        <div className="dest-list-home">
-          {likedDests.map(dest => (
-            <div key={dest.id} className="dest-chip">
-              <div className="dest-chip__left">
-                <div>
-                  <div className="dest-chip__name">
-                    {dest.name}
-                  </div>
-
-                  <div className="dest-chip__country">
-                    {dest.country}
-                  </div>
-                </div>
-              </div>
-
-              <div className="dest-chip__actions">
-                <button
-                  className="gmaps-btn"
-                  onClick={() => openDestinationInGoogleMaps(dest)}
-                >
-                  Open in Google Maps
-                </button>
-
-                <button
-                  className="dest-chip__remove"
-                  onClick={() => setConfirmDest(dest)}
-                >
-                  Remove
-                </button>
-              </div>
+        <div className="stats-row">
+          {[
+            ['Countries', '20'],
+            ['Days Planned', '40'],
+            ['Spent This Year', '$2,300'],
+            ['Trips Done', '5'],
+          ].map(([label, val]) => (
+            <div className="stats-card" key={label}>
+              <span className="stats-card__val">{val}</span>
+              <span className="stats-card__label">{label}</span>
             </div>
           ))}
         </div>
-      )}
 
-      {confirmDest && (
-        <ConfirmDialog
-          message={`Remove ${confirmDest.name} from your liked destinations?`}
-          onConfirm={() => removeDest(confirmDest.id)}
-          onCancel={() => setConfirmDest(null)}
-        />
-      )}
+        <h2 className="section-title">Saved Itineraries</h2>
+
+        {savedItineraries.length === 0 ? (
+          <p className="section-empty">
+            No saved itineraries yet — generate one and save it!
+          </p>
+        ) : (
+          <div className="saved-list">
+            {savedItineraries.map(entry => (
+              <SavedItineraryCard
+                key={entry.id}
+                entry={entry}
+                onDelete={deleteItinerary}
+              />
+            ))}
+          </div>
+        )}
+
+        <h2 className="section-title">Liked Destinations</h2>
+
+        {likedDests.length === 0 ? (
+          <p className="section-empty">
+            No liked destinations yet; explore destinations to save them here!
+          </p>
+        ) : (
+          <div className="dest-list-home">
+            {likedDests.map(dest => (
+              <div key={dest.id} className="dest-chip">
+                <div className="dest-chip__left">
+                  <div>
+                    <div className="dest-chip__name">{dest.name}</div>
+                    <div className="dest-chip__country">{dest.country}</div>
+                  </div>
+                </div>
+
+                <div className="dest-chip__actions">
+                  <button
+                    className="gmaps-btn"
+                    onClick={() => openDestinationInGoogleMaps(dest)}
+                  >
+                    Open in Google Maps
+                  </button>
+
+                  <button
+                    className="dest-chip__remove"
+                    onClick={() => setConfirmDest(dest)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {confirmDest && (
+          <ConfirmDialog
+            message={`Remove ${confirmDest.name} from your liked destinations?`}
+            onConfirm={() => removeDest(confirmDest.id)}
+            onCancel={() => setConfirmDest(null)}
+          />
+        )}
+      </div>
     </div>
   )
 }

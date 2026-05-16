@@ -31,7 +31,11 @@ function AppLayout() {
     <DarkModeContext.Provider value={{ darkMode, setDarkMode }}>
       <div
         className={darkMode ? "dark-mode" : ""}
-        style={{ background: "linear-gradient(180deg, #05070D 0%, #0B1220 45%, #10263D 100%)", minHeight: "100vh" }}
+        style={{
+          background: "linear-gradient(180deg, #05070D 0%, #0B1220 45%, #10263D 100%)",
+          minHeight: "100vh",
+          width: "100%",
+        }}
       >
         <Navbar />
         <Outlet />

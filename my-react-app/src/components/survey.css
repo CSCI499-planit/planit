@@ -274,3 +274,116 @@
   height: 38px;
   
 }
+
+/* Required star */
+.survey-required-star {
+  color: #ff6b6b;
+  font-weight: 700;
+}
+
+/* Subtitle note */
+.survey-required-note {
+  color: rgba(220, 233, 245, 0.5);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* Sub-hint in legend */
+.survey-legend-sub {
+  font-weight: 400;
+  font-size: 0.82rem;
+  color: rgba(220, 233, 245, 0.5);
+  margin-left: 2px;
+}
+
+/* Error state on fieldset */
+.survey-fieldset--error {
+  border-color: rgba(255, 90, 90, 0.55) !important;
+  background: rgba(255, 60, 60, 0.06) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 90, 90, 0.25),
+    0 0 18px rgba(255, 60, 60, 0.1) !important;
+  animation: survey-shake 0.35s ease;
+}
+
+@keyframes survey-shake {
+  0%   { transform: translateX(0); }
+  20%  { transform: translateX(-4px); }
+  40%  { transform: translateX(4px); }
+  60%  { transform: translateX(-3px); }
+  80%  { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+
+/* Inline field error message */
+.survey-field-error {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 0.75rem;
+  color: #ff8080;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.survey-field-error svg {
+  flex-shrink: 0;
+  color: #ff6b6b;
+}
+
+/* Floating error banner (fixed, above progress bar) */
+.survey-error-banner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.7rem 1.2rem;
+  background: rgba(30, 8, 8, 0.92);
+  border: 1px solid rgba(255, 90, 90, 0.45);
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  box-shadow:
+    0 4px 24px rgba(255, 60, 60, 0.25),
+    0 0 0 1px rgba(255, 90, 90, 0.1);
+  backdrop-filter: blur(18px);
+  color: #ffb3b3;
+  font-size: 0.83rem;
+  max-width: 480px;
+  width: calc(100% - 2rem);
+  animation: survey-banner-drop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes survey-banner-drop {
+  from { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+.survey-error-banner svg {
+  flex-shrink: 0;
+  color: #ff6b6b;
+}
+
+.survey-error-banner strong {
+  color: #ffcece;
+}
+
+.survey-error-banner-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: rgba(255, 180, 180, 0.6);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.survey-error-banner-close:hover {
+  color: #ffb3b3;
+}
