@@ -76,18 +76,21 @@ img {
   align-items: center;
   gap: 0.3rem;
   padding: 0.3rem 0.85rem;
-  background: #fff;
-  color: #1a73e8;
-  border: 1.5px solid #1a73e8;
+  /* background: #fff;
+  color: #1a73e8; */
+  background: rgba(34, 211, 238, 0.06);
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.22);
   border-radius: 999px;
   font-size: 0.75rem;
   font-weight: 600;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
 
 .gmaps-btn:hover {
-  background: #e8f0fe;
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.4);
 }
