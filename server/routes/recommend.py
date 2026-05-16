@@ -24,6 +24,7 @@ ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://localhost:8001").rstrip("/"
 ML_INTERNAL_TOKEN = os.getenv("ML_INTERNAL_TOKEN", "").strip()
 MAX_PLACE_SEARCH_LIMIT = 100
 MAX_RADIUS_M = 50_000
+MAX_ML_EXCLUDED_IDS = 500
 logger = logging.getLogger(__name__)
 
 
@@ -222,6 +223,12 @@ def _fetch_places_with_novelty(
     return fresh
 
 
+def _ml_excluded_ids(excluded: list[str], places: list[dict]) -> list[str]:
+    """Keep the ML payload bounded after backend-side novelty filtering."""
+    place_ids = {place.get("place_id") for place in places if place.get("place_id")}
+    return list(place_ids & set(excluded))[:MAX_ML_EXCLUDED_IDS]
+
+
 def _log_recommendation_impressions(
     user_id: str,
     places: list[dict],
@@ -311,7 +318,7 @@ async def recommend_places(
         "preference":         preference,
         "places":             places,
         "visits":             visits,
-        "excluded_place_ids": excluded,
+        "excluded_place_ids": _ml_excluded_ids(excluded, places),
         "top_k":              body.top_k,
     }
     result = _ml_post("/recommend", ml_body)
@@ -353,7 +360,7 @@ async def recommend_itinerary(
         "preference":         preference,
         "places":             places,
         "visits":             visits,
-        "excluded_place_ids": excluded,
+        "excluded_place_ids": _ml_excluded_ids(excluded, places),
         "top_k":              body.top_k,
         "trip_days":          body.trip_days,
         "start_date":         body.start_date,
