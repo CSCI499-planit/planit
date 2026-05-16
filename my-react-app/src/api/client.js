@@ -1,4 +1,16 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
+export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+
+function requireApiBaseUrl() {
+  if (!apiBaseUrl) {
+    throw new Error('Missing VITE_API_BASE_URL. Set it to the deployed backend URL.')
+  }
+
+  return apiBaseUrl
+}
+
+export function apiUrl(path) {
+  return `${requireApiBaseUrl()}${path}`
+}
 
 function getToken() {
   return sessionStorage.getItem('access_token')
@@ -13,7 +25,7 @@ async function request(path, { body, method, ...options } = {}) {
     ...options.headers,
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method: method ?? (body ? 'POST' : 'GET'),
     headers,
     ...(body ? { body: JSON.stringify(body) } : {}),

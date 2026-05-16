@@ -12,7 +12,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from supabase import Client
 
 from server.config.db import get_current_user, get_db_client
@@ -21,6 +21,9 @@ from server.controllers.interactions import EVENT_RATINGS
 router = APIRouter(prefix="/recommend", tags=["recommend"])
 
 ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://localhost:8001").rstrip("/")
+ML_INTERNAL_TOKEN = os.getenv("ML_INTERNAL_TOKEN", "").strip()
+MAX_PLACE_SEARCH_LIMIT = 100
+MAX_RADIUS_M = 50_000
 logger = logging.getLogger(__name__)
 
 
@@ -28,9 +31,43 @@ logger = logging.getLogger(__name__)
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _ml_headers() -> dict[str, str]:
+    if not ML_INTERNAL_TOKEN:
+        return {}
+    return {"X-PlanIt-Internal-Token": ML_INTERNAL_TOKEN}
+
+
+def _metadata_float(meta: dict, key: str, default: float) -> float:
+    try:
+        return float(meta.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _metadata_int(meta: dict, key: str, default: int) -> int:
+    try:
+        return max(int(meta.get(key, default)), 1)
+    except (TypeError, ValueError):
+        return default
+
+
+def _metadata_tags(meta: dict) -> list[str]:
+    raw = meta.get("tags") or []
+    if isinstance(raw, str):
+        return [tag.strip() for tag in raw.split(",") if tag.strip()]
+    if isinstance(raw, list):
+        return [str(tag).strip() for tag in raw if str(tag).strip()]
+    return []
+
+
 def _ml_get(path: str, params: dict) -> dict:
     try:
-        res = httpx.get(f"{ML_SERVICE_URL}{path}", params=params, timeout=90.0)
+        res = httpx.get(
+            f"{ML_SERVICE_URL}{path}",
+            params=params,
+            headers=_ml_headers(),
+            timeout=90.0,
+        )
         res.raise_for_status()
         return res.json()
     except httpx.TimeoutException:
@@ -43,7 +80,12 @@ def _ml_get(path: str, params: dict) -> dict:
 
 def _ml_post(path: str, body: dict) -> dict:
     try:
-        res = httpx.post(f"{ML_SERVICE_URL}{path}", json=body, timeout=60.0)
+        res = httpx.post(
+            f"{ML_SERVICE_URL}{path}",
+            json=body,
+            headers=_ml_headers(),
+            timeout=60.0,
+        )
         res.raise_for_status()
         return res.json()
     except httpx.TimeoutException:
@@ -78,7 +120,7 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
     """Returns (visits, excluded_place_ids) built from the user's interaction history."""
     interactions = (
         client.table("user_interactions")
-        .select("place_id, event_type, created_at")
+        .select("place_id, event_type, metadata, created_at")
         .eq("user_id", user_id)
         .execute()
         .data or []
@@ -102,14 +144,25 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
     for row in interactions:
         pid   = row["place_id"]
         event = row.get("event_type", "")
+        meta  = row.get("metadata") or {}
         if event == "google_import":
-            r = float((row.get("metadata") or {}).get("rating", 3.0))
+            r = _metadata_float(meta, "rating", 3.0)
+            visit_count = _metadata_int(meta, "visit_count", 1)
+            tags = _metadata_tags(meta)
         else:
             r = EVENT_RATINGS.get(event, 2.5)
+            visit_count = 1
+            tags = []
         if pid not in agg:
-            agg[pid] = {"ratings": [], "visit_count": 0, "created_at": row.get("created_at")}
-        agg[pid]["ratings"].append(r)
-        agg[pid]["visit_count"] += 1
+            agg[pid] = {
+                "ratings": [],
+                "visit_count": 0,
+                "tags": set(),
+                "created_at": row.get("created_at"),
+            }
+        agg[pid]["ratings"].extend([r] * visit_count)
+        agg[pid]["visit_count"] += visit_count
+        agg[pid]["tags"].update(tags)
 
     visits: list[dict] = [
         {
@@ -117,7 +170,7 @@ def _fetch_user_history(user_id: str, client: Client) -> tuple[list[dict], list[
             "place_id":    pid,
             "rating":      round(sum(v["ratings"]) / len(v["ratings"]), 2),
             "visit_count": v["visit_count"],
-            "tags":        [],
+            "tags":        list(v["tags"]),
             "created_at":  v["created_at"],
         }
         for pid, v in agg.items()
@@ -154,12 +207,16 @@ def _fetch_places_with_novelty(
 
     if len(fresh) < fresh_target:
         # retry 1: double the limit, same radius
-        places = _fetch_places(location, radius_m, min(limit * 2, 200))
+        places = _fetch_places(location, radius_m, min(limit * 2, MAX_PLACE_SEARCH_LIMIT))
         fresh  = [p for p in places if p.get("place_id") not in excluded_set]
 
     if len(fresh) < fresh_target:
         # retry 2: double the limit AND expand radius by 50 %
-        places = _fetch_places(location, int(radius_m * 1.5), min(limit * 2, 200))
+        places = _fetch_places(
+            location,
+            min(int(radius_m * 1.5), MAX_RADIUS_M),
+            min(limit * 2, MAX_PLACE_SEARCH_LIMIT),
+        )
         fresh  = [p for p in places if p.get("place_id") not in excluded_set]
 
     return fresh
@@ -198,27 +255,27 @@ def _log_recommendation_impressions(
 # ---------------------------------------------------------------------------
 
 class PlacesRequest(BaseModel):
-    location:           str
-    top_k:              int = 20
-    radius_m:           int = 5000
-    limit:              int = 50
-    excluded_place_ids: list[str] = []
+    location:           str = Field(..., min_length=2, max_length=120)
+    top_k:              int = Field(20, ge=1, le=50)
+    radius_m:           int = Field(5000, ge=100, le=MAX_RADIUS_M)
+    limit:              int = Field(50, ge=1, le=MAX_PLACE_SEARCH_LIMIT)
+    excluded_place_ids: list[str] = Field(default_factory=list, max_length=500)
 
 
 class HotelLocation(BaseModel):
-    latitude:  float
-    longitude: float
+    latitude:  float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
 
 
 class ItineraryRequest(BaseModel):
-    location:       str
-    trip_days:      int = 1
+    location:       str = Field(..., min_length=2, max_length=120)
+    trip_days:      int = Field(1, ge=1, le=14)
     start_date:     Optional[str] = None
     hotel_location: Optional[HotelLocation] = None
-    top_k:          int = 20
-    radius_m:       int = 5000
-    limit:          int = 50
-    excluded_place_ids: list[str] = []
+    top_k:          int = Field(20, ge=1, le=50)
+    radius_m:       int = Field(5000, ge=100, le=MAX_RADIUS_M)
+    limit:          int = Field(50, ge=1, le=MAX_PLACE_SEARCH_LIMIT)
+    excluded_place_ids: list[str] = Field(default_factory=list, max_length=500)
 
 
 # ---------------------------------------------------------------------------

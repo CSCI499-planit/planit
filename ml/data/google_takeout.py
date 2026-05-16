@@ -148,7 +148,7 @@ def parse_google_takeout(
                 fallback_id = f"gmap_{name.lower().replace(' ', '_')}" if not place_id else place_id
                 aggregated[key] = {
                     "place_id":  fallback_id,
-                    "tags":      place_tag_db.get(place_id, []),
+                    "tags":      place_tag_db.get(place_id, []) or _infer_tags_from_name(name),
                     "durations": [],
                     "count":     0,
                 }

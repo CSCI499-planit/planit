@@ -380,13 +380,23 @@ function DayCard({
   )
 }
 
+function createSavedItinerary(location, tripDays, itinerary) {
+  return {
+    id: Date.now(),
+    location,
+    tripDays,
+    savedAt:
+      new Date().toLocaleDateString(),
+    itinerary,
+  }
+}
+
 export default function GeneratePage() {
   const [location, setLocation] = useState('')
   const [tripDays, setTripDays] = useState(3)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [itinerary, setItinerary] = useState(null)
-  const [saved, setSaved] = useState(false)
   const [toast, setToast] = useState('')
   const [feedback, setFeedback] = useState({})
   const resultsRef = useRef(null)
@@ -494,19 +504,10 @@ useEffect(() => {
 
       if (!alreadySaved) {
         userStorage.set('savedItineraries', [
-          {
-            id: Date.now(),
-            location,
-            tripDays,
-            savedAt:
-              new Date().toLocaleDateString(),
-            itinerary,
-          },
+          createSavedItinerary(location, tripDays, itinerary),
           ...existing,
         ])
       }
-
-      setSaved(true)
 
       showToast(
         'Itinerary liked and saved to your home page!'
@@ -523,7 +524,6 @@ useEffect(() => {
 
     setError('')
     setLoading(true)
-    setSaved(false)
     setItinerary(null)
     setFeedback({})
 

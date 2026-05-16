@@ -3,7 +3,9 @@ import { Routes, Route, Outlet, Navigate } from "react-router-dom";
 import "./styles/index.css";
 import ScrollToTop from "./components/ScrollToTop";
 
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AuthProvider } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
+import { apiBaseUrl } from "./api/client";
 import LandingPage from "./pages/landing";
 import SignupPage from "./pages/signup";
 import SigninPage from "./pages/signin";
@@ -40,7 +42,9 @@ function AppLayout() {
 
 function WakeServices() {
   useEffect(() => {
-    fetch(import.meta.env.VITE_API_BASE_URL + "/wake").catch(() => {});
+    if (!apiBaseUrl) return;
+
+    fetch(`${apiBaseUrl}/wake`).catch(() => {});
   }, []);
   return null;
 }

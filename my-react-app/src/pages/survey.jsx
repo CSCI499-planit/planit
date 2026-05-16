@@ -109,7 +109,8 @@ export default function SurveyPage() {
       max_travel_minutes: answers.max_travel_minutes.replace(" min", ""),
     };
 
-    const { maps_history, ...payload } = normalized;
+    const payload = { ...normalized };
+    delete payload.maps_history;
 
     localStorage.setItem("userPreferences", JSON.stringify(payload));
 

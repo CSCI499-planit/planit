@@ -8,6 +8,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ml.api.routes.recommend import router as recommend_router
 from ml.api.routes.profile   import router as profile_router
@@ -26,6 +27,7 @@ ML_HOST = os.getenv("ML_HOST", "0.0.0.0")
 RETRAIN_THRESHOLD      = int(os.getenv("RETRAIN_THRESHOLD", "10"))
 MIN_RETRAIN_INTERVAL_H = float(os.getenv("MIN_RETRAIN_INTERVAL_HOURS", "1"))
 _WEBHOOK_SECRET        = os.getenv("WEBHOOK_SECRET", "")
+_ML_INTERNAL_TOKEN     = os.getenv("ML_INTERNAL_TOKEN", "").strip()
 
 
 _STORAGE_BUCKET   = os.getenv("ARTIFACT_BUCKET", "ml-artifacts")
@@ -361,10 +363,31 @@ app.include_router(profile_router)
 app.include_router(places_router)
 
 
+@app.middleware("http")
+async def require_internal_token(request: Request, call_next):
+    public_paths = {"/health", "/webhook/interactions"}
+    if (
+        _ML_INTERNAL_TOKEN
+        and request.method != "OPTIONS"
+        and request.url.path not in public_paths
+        and request.headers.get("X-PlanIt-Internal-Token") != _ML_INTERNAL_TOKEN
+    ):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid ML internal token."},
+        )
+
+    return await call_next(request)
+
+
 @app.get("/health")
 def health():
     pipeline_ready = hasattr(app.state, "pipeline") and app.state.pipeline is not None
-    return {"status": "ok", "pipeline_loaded": pipeline_ready}
+    return {
+        "status": "ok",
+        "pipeline_loaded": pipeline_ready,
+        "internal_auth_enabled": bool(_ML_INTERNAL_TOKEN),
+    }
 
 
 @app.post("/webhook/interactions")

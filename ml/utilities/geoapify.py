@@ -7,14 +7,33 @@ from __future__ import annotations
 import math
 import os
 import logging
+from copy import deepcopy
 from difflib import SequenceMatcher
 from typing import Any
 
 import httpx
 
 from ml.data.preprocess import PlaceRecord
+from ml.utilities.cache import TTLCache
 
 logger = logging.getLogger(__name__)
+
+_GEOCODE_CACHE = TTLCache(
+    maxsize=int(os.getenv("GEOAPIFY_GEOCODE_CACHE_MAXSIZE", "512")),
+    ttl_seconds=float(os.getenv("GEOAPIFY_GEOCODE_CACHE_TTL_SECONDS", "86400")),
+)
+_PLACES_CACHE = TTLCache(
+    maxsize=int(os.getenv("GEOAPIFY_PLACES_CACHE_MAXSIZE", "256")),
+    ttl_seconds=float(os.getenv("GEOAPIFY_PLACES_CACHE_TTL_SECONDS", "21600")),
+)
+_CANDIDATES_CACHE = TTLCache(
+    maxsize=int(os.getenv("GEOAPIFY_CANDIDATES_CACHE_MAXSIZE", "256")),
+    ttl_seconds=float(os.getenv("GEOAPIFY_GEOCODE_CACHE_TTL_SECONDS", "86400")),
+)
+
+
+def _normalize_query(value: str) -> str:
+    return " ".join(value.lower().strip().split())
 
 
 def _api_key() -> str:
@@ -51,6 +70,18 @@ def _bbox_diagonal_m(bbox: list[float]) -> float:
 
 
 def _geocode_full(location: str) -> dict:
+    key = _normalize_query(location)
+    cached = _GEOCODE_CACHE.get(key)
+    if cached is not TTLCache.missing():
+        logger.info("Geoapify geocode cache hit for %r", location)
+        return deepcopy(cached)
+
+    result = _geocode_full_uncached(location)
+    _GEOCODE_CACHE.set(key, deepcopy(result))
+    return result
+
+
+def _geocode_full_uncached(location: str) -> dict:
     """Geocode and return lat, lon, bbox, and bbox_diagonal_m.
 
     bbox is [west, south, east, north] (min_lon, min_lat, max_lon, max_lat).
@@ -98,6 +129,12 @@ def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
     Each entry: {"display": str, "lat": float, "lon": float}
     Returns an empty list when nothing is found (never raises on empty results).
     """
+    key = (_normalize_query(query), int(limit))
+    cached = _CANDIDATES_CACHE.get(key)
+    if cached is not TTLCache.missing():
+        logger.info("Geoapify candidate cache hit for %r", query)
+        return deepcopy(cached)
+
     resp = httpx.get(
         "https://api.geoapify.com/v1/geocode/search",
         params={"text": query, "limit": limit, "apiKey": _api_key()},
@@ -123,6 +160,7 @@ def geocode_candidates(query: str, limit: int = 5) -> list[dict]:
             "lat":     float(coords[1]),
             "lon":     float(coords[0]),
         })
+    _CANDIDATES_CACHE.set(key, deepcopy(results))
     return results
 
 
@@ -188,6 +226,12 @@ def fetch_places_enriched(
 
 
 def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 50) -> list[PlaceRecord]:
+    cache_key = (_normalize_query(location), int(radius_m), int(limit))
+    cached = _PLACES_CACHE.get(cache_key)
+    if cached is not TTLCache.missing():
+        logger.info("Geoapify places cache hit for %r", location)
+        return deepcopy(cached)
+
     geo = _geocode_full(location)
     lat, lon, bbox, diag, place_id = geo["lat"], geo["lon"], geo["bbox"], geo["bbox_diagonal_m"], geo["place_id"]
     if place_id:
@@ -198,6 +242,7 @@ def fetch_places_for_location(location: str, radius_m: int = 5000, limit: int = 
         logger.info("Geocoded %r → (%.4f, %.4f) — point geocode, using radius %dm", location, lat, lon, radius_m)
     places = fetch_places_enriched(lat, lon, radius_m=radius_m, limit=limit, bbox=bbox, bbox_diagonal_m=diag, place_id=place_id)
     logger.info("Fetched %d places for %r (after dedup)", len(places), location)
+    _PLACES_CACHE.set(cache_key, deepcopy(places))
     return places
 
 

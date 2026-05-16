@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiUrl } from "../api/client";
 import "../components/upload.css";
 
 function isGoogleTakeoutFile(data) {
@@ -70,7 +71,7 @@ export default function UploadPage() {
 
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_API_BASE_URL}/import/google-takeout`,
+        apiUrl("/import/google-takeout"),
         {
           method: "POST",
           headers: {

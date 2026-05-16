@@ -20,10 +20,12 @@ const sunPosAt = (dt) => {
   ]
 }
 
+const initialNow = Date.now()
+
 export default function LandingPage() {
   const navigate = useNavigate()
-  const [now, setNow] = useState(Date.now())
-  const [globeTime, setGlobeTime] = useState(Date.now())
+  const [now, setNow] = useState(initialNow)
+  const [globeTime, setGlobeTime] = useState(initialNow)
   const [globeMaterial, setGlobeMaterial] = useState()
 
   // const globeRef = useRef(null)
@@ -181,7 +183,6 @@ export default function LandingPage() {
   useEffect(() => {
     if (!globeMaterial) return
   
-    const t = solar.century(globeTime)
     const [lng, lat] = sunPosAt(globeTime)
   
     globeMaterial.uniforms.sunPosition.value.set(lng, lat)

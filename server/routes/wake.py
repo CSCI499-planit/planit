@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 ML_SERVICE_URL = os.getenv(
     "ML_SERVICE_URL", "http://localhost:8001").rstrip("/")
+ML_INTERNAL_TOKEN = os.getenv("ML_INTERNAL_TOKEN", "").strip()
 WAKE_COOLDOWN_SECONDS = int(os.getenv("WAKE_COOLDOWN_SECONDS", "60"))
 _last_ml_wake_at = 0.0
 
@@ -29,7 +30,11 @@ def _wake_ml_service(force: bool = False) -> None:
         return
 
     try:
-        res = httpx.get(f"{ML_SERVICE_URL}/health", timeout=45.0)
+        headers = (
+            {"X-PlanIt-Internal-Token": ML_INTERNAL_TOKEN}
+            if ML_INTERNAL_TOKEN else {}
+        )
+        res = httpx.get(f"{ML_SERVICE_URL}/health", headers=headers, timeout=45.0)
         res.raise_for_status()
         _last_ml_wake_at = now
     except Exception as exc:

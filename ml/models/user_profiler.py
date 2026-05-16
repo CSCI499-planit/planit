@@ -83,7 +83,31 @@ EVENT_RATINGS: dict[str, float] = {
     "unlike":            1.0,
     "itinerary_like":    5.0,
     "itinerary_dislike": 1.0,
+    "google_import":     3.0,
 }
+
+
+def _metadata_float(meta: dict, key: str, default: float) -> float:
+    try:
+        return float(meta.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _metadata_int(meta: dict, key: str, default: int) -> int:
+    try:
+        return max(int(meta.get(key, default)), 1)
+    except (TypeError, ValueError):
+        return default
+
+
+def _metadata_tags(meta: dict) -> list[str]:
+    raw = meta.get("tags") or []
+    if isinstance(raw, str):
+        return [tag.strip() for tag in raw.split(",") if tag.strip()]
+    if isinstance(raw, list):
+        return [str(tag).strip() for tag in raw if str(tag).strip()]
+    return []
 
 
 def parse_app_interactions(
@@ -100,13 +124,18 @@ def parse_app_interactions(
             continue
         place_id   = row["place_id"]
         event_type = row.get("event_type", "view")
-        rating     = EVENT_RATINGS.get(event_type, 2.5)
+        meta       = row.get("metadata") or {}
+        if event_type == "google_import":
+            rating = _metadata_float(meta, "rating", EVENT_RATINGS["google_import"])
+            visit_count = _metadata_int(meta, "visit_count", 1)
+        else:
+            rating = EVENT_RATINGS.get(event_type, 2.5)
+            visit_count = 1
 
         key = (row_user, place_id)
         if key not in aggregated:
             # prefer place_tag_db; fall back to metadata.tags (set by simulation)
-            meta = row.get("metadata") or {}
-            tags = place_tag_db.get(place_id) or meta.get("tags") or []
+            tags = place_tag_db.get(place_id) or _metadata_tags(meta)
             aggregated[key] = {
                 "user_id":     row_user,
                 "place_id":    place_id,
@@ -115,8 +144,8 @@ def parse_app_interactions(
                 "visit_count": 0,
                 "created_at":  row.get("created_at"),
             }
-        aggregated[key]["ratings"].append(rating)
-        aggregated[key]["visit_count"] += 1
+        aggregated[key]["ratings"].extend([rating] * visit_count)
+        aggregated[key]["visit_count"] += visit_count
 
     visits: list[UserVisit] = []
     for agg in aggregated.values():

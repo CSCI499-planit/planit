@@ -51,5 +51,15 @@ app.include_router(interaction_route)
 app.include_router(import_route)
 app.include_router(wake_route)
 
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "service": "planit-backend",
+        "ml_service_configured": bool(os.getenv("ML_SERVICE_URL", "")),
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host=API_HOST, port=int(API_PORT))

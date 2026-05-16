@@ -7,9 +7,13 @@ router = APIRouter()
 @router.get("/places/search")
 def search_places(
     location:  str = Query(
-        ..., description="Neighbourhood, hotel, landmark, or city e.g. 'Trastevere, Rome'"),
-    radius_m:  int = Query(5000, description="Search radius in metres"),
-    limit:     int = Query(50,   description="Max number of places to return"),
+        ...,
+        min_length=2,
+        max_length=120,
+        description="Neighbourhood, hotel, landmark, or city e.g. 'Trastevere, Rome'",
+    ),
+    radius_m:  int = Query(5000, ge=100, le=50_000, description="Search radius in metres"),
+    limit:     int = Query(50, ge=1, le=100, description="Max number of places to return"),
 ):
     try:
         places = fetch_places_for_location(

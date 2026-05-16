@@ -27,7 +27,7 @@ ml/eval_*.py
 # local dev scripts
 ml/data/interactive_feedback.py
 ml/data/validate_system.py
-docs/ml_integration.md
+docs/*.md
 demo/run_demo.py
 migrate_auth.py
 INTEGRATION_CHECKLIST.md
