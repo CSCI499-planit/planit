@@ -293,17 +293,17 @@ export default function GeneratePlacesPage() {
 
     if (type === 'like') {
       const likedPlace = toLikedDestination(place, location)
-      const existing = userStorage.get('likedDestinations') || []
+      const existing = userStorage.get('likedPlaces') || []
       const withoutDuplicate = existing.filter(
         dest => dest.id !== likedPlace.id
       )
 
-      userStorage.set('likedDestinations', [
+      userStorage.set('likedPlaces', [
         likedPlace,
         ...withoutDuplicate,
       ])
 
-      showToast('Place saved to Liked Destinations!')
+      showToast('Place saved to Liked Places!')
       return
     }
 

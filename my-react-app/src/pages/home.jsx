@@ -42,7 +42,7 @@ function Toast({ message, onDone }) {
       <span className="home-toast__icon">🎉</span>
       <div>
         <strong>Preferences saved!</strong>
-        <p>Use the buttons below to generate your first itinerary or discover places.</p>
+        <p>Use the buttons above to generate your first itinerary or discover places.</p>
       </div>
       <button className="home-toast__close" onClick={() => { setVisible(false); setTimeout(onDone, 500) }}>✕</button>
     </div>
@@ -152,7 +152,9 @@ export default function HomePage() {
     () => userStorage.get('savedItineraries') || []
   )
   const [likedDests,  setLikedDests]  = useState(() => userStorage.get('likedDestinations') || [])
+  const [likedPlaces, setLikedPlaces] = useState(() => userStorage.get('likedPlaces') || [])
   const [confirmDest, setConfirmDest] = useState(null)
+  const [confirmPlace, setConfirmPlace] = useState(null)
 
   const deleteItinerary = id => {
     const updated = savedItineraries.filter(e => e.id !== id)
@@ -166,11 +168,32 @@ export default function HomePage() {
     userStorage.set('likedDestinations', updated)
     setConfirmDest(null)
   }
+  const removePlace = placeId => {
+    const updated = likedPlaces.filter(p => p.id !== placeId)
+    setLikedPlaces(updated)
+    userStorage.set('likedPlaces', updated)
+    setConfirmPlace(null)
+  }
 
   const firstName = user?.name?.split(' ')[0] || 'Traveler'
   const hour      = new Date().getHours()
   const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
+   useEffect(() => {
+    const all = userStorage.get('likedDestinations') || []
+    const hasOldMixed = all.some(d => d.source === 'generated_place')
+    
+    if (hasOldMixed) {
+      const destinations = all.filter(d => d.source !== 'generated_place')
+      const places       = all.filter(d => d.source === 'generated_place')
+      
+      userStorage.set('likedDestinations', destinations)
+      userStorage.set('likedPlaces', places)
+      
+      setLikedDests(destinations)
+      setLikedPlaces(places)
+    }
+  }, [])
   return (
     <div className="page">
 
@@ -228,7 +251,7 @@ export default function HomePage() {
 
         <h2 className="section-title">Saved Itineraries</h2>
         {savedItineraries.length === 0 ? (
-          <p className="section-empty">No saved itineraries yet — generate one and save it!</p>
+          <p className="section-empty">No saved itineraries yet; generate one and save it!</p>
         ) : (
           <div className="saved-list">
             {savedItineraries.map(entry => (
@@ -236,10 +259,36 @@ export default function HomePage() {
             ))}
           </div>
         )}
+        
+        <h2 className="section-title">Saved Places</h2>
+        {likedPlaces.length === 0 ? (
+          <p className="section-empty">No saved places yet; discover places to save them here!</p>
+        ) : (
+          <div className="dest-list-home">
+            {likedPlaces.map(place => (
+              <div key={place.id} className="dest-chip">
+                <div className="dest-chip__left">
+                  <div>
+                    <div className="dest-chip__name">{place.name}</div>
+                    <div className="dest-chip__country">{place.country}</div>
+                  </div>
+                </div>
+                <div className="dest-chip__actions">
+                  <button className="gmaps-btn" onClick={() => openDestinationInGoogleMaps(place)}>
+                    Open in Google Maps
+                  </button>
+                  <button className="dest-chip__remove" onClick={() => setConfirmPlace(place)}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <h2 className="section-title">Liked Destinations</h2>
         {likedDests.length === 0 ? (
-          <p className="section-empty">No liked destinations yet — explore destinations to save them here!</p>
+          <p className="section-empty">No liked destinations yet; explore destinations to save them here!</p>
         ) : (
           <div className="dest-list-home">
             {likedDests.map(dest => (
@@ -268,6 +317,14 @@ export default function HomePage() {
             message={`Remove ${confirmDest.name} from your liked destinations?`}
             onConfirm={() => removeDest(confirmDest.id)}
             onCancel={() => setConfirmDest(null)}
+          />
+        )}
+
+        {confirmPlace && (
+          <ConfirmDialog
+            message={`Remove ${confirmPlace.name} from your saved places?`}
+            onConfirm={() => removePlace(confirmPlace.id)}
+            onCancel={() => setConfirmPlace(null)}
           />
         )}
       </div>

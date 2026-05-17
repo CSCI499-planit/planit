@@ -169,6 +169,14 @@
   margin-bottom: 15px;
 }
 
+.section-subtitle {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.3);
+  margin-top: -10px;
+  margin-bottom: 1rem;
+  font-style: italic;
+}
+
 .section-empty {
   color: #94a3b8;
   font-size: 0.88rem;

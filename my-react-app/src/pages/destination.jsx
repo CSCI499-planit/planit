@@ -52,12 +52,7 @@ export default function DestinationPage() {
   const handleLike = (id) => {
     setLiked(prev => {
       const updated = { ...prev, [id]: !prev[id] }
-      const generatedPlaces = (userStorage.get('likedDestinations') || [])
-        .filter(d => d.source === 'generated_place')
-      userStorage.set('likedDestinations', [
-        ...generatedPlaces,
-        ...destinations.filter(d => updated[d.id]),
-      ])
+      userStorage.set('likedDestinations', destinations.filter(d => updated[d.id]))
       return updated
     })
     setDisliked(prev => ({ ...prev, [id]: false }))
@@ -67,12 +62,7 @@ export default function DestinationPage() {
     setDisliked(prev => ({ ...prev, [id]: !prev[id] }))
     setLiked(prev => {
       const updated = { ...prev, [id]: false }
-      const generatedPlaces = (userStorage.get('likedDestinations') || [])
-        .filter(d => d.source === 'generated_place')
-      userStorage.set('likedDestinations', [
-        ...generatedPlaces,
-        ...destinations.filter(d => updated[d.id]),
-      ])
+      userStorage.set('likedDestinations', destinations.filter(d => updated[d.id]))
       return updated
     })
   }
