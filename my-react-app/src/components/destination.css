@@ -36,12 +36,18 @@
 .dest-list {
   position: relative;
   z-index: 1;
-  max-width: 780px;
+  max-width: 1200px;
   margin: 2rem auto;
   padding: 0 1.25rem 2rem;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .dest-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dest-title {
