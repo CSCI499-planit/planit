@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/useAuth'
 import { userStorage } from '../utils/userStorage'
@@ -9,72 +9,59 @@ function openInGoogleMaps(stops) {
   const coords = stops
     .filter(s => s.place?.latitude && s.place?.longitude)
     .map(s => `${s.place.latitude},${s.place.longitude}`)
-
   if (coords.length === 0) return
-
-  const origin = coords[0]
+  const origin      = coords[0]
   const destination = coords[coords.length - 1]
-  const waypoints = coords
-    .slice(1, -1)
-    .slice(0, 8)
-    .join('|')
-
+  const waypoints   = coords.slice(1, -1).slice(0, 8).join('|')
   const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}${
     waypoints ? `&waypoints=${waypoints}` : ''
   }&travelmode=driving`
-
   window.open(url, '_blank')
 }
 
 function openDestinationInGoogleMaps(dest) {
-  const query = [
-    dest.name,
-    dest.address,
-    dest.city,
-    dest.state,
-    dest.country || dest.locationQuery,
-  ]
-    .filter(Boolean)
-    .join(', ') || (
-    dest.latitude && dest.longitude
-      ? `${dest.latitude},${dest.longitude}`
-      : ''
+  const query = [dest.name, dest.address, dest.city, dest.state, dest.country || dest.locationQuery]
+    .filter(Boolean).join(', ') || (
+    dest.latitude && dest.longitude ? `${dest.latitude},${dest.longitude}` : ''
   )
-
   if (!query) return
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, '_blank')
+}
 
-  window.open(
-    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`,
-    '_blank'
+function Toast({ message, onDone }) {
+  const [visible, setVisible] = useState(true)
+
+  useEffect(() => {
+    const hide = setTimeout(() => setVisible(false), 4500)
+    const done = setTimeout(() => onDone(), 5000)
+    return () => { clearTimeout(hide); clearTimeout(done) }
+  }, [onDone])
+
+  return (
+    <div className={`home-toast ${visible ? 'home-toast--in' : 'home-toast--out'}`}>
+      <span className="home-toast__icon">🎉</span>
+      <div>
+        <strong>Preferences saved!</strong>
+        <p>Use the buttons below to generate your first itinerary or discover places.</p>
+      </div>
+      <button className="home-toast__close" onClick={() => { setVisible(false); setTimeout(onDone, 500) }}>✕</button>
+    </div>
   )
 }
 
 function SavedItineraryCard({ entry, onDelete }) {
   const [expanded, setExpanded] = useState(false)
-  const [confirm, setConfirm] = useState(false)
-
-  const allStops =
-    entry.itinerary?.flatMap(d => d.stops) || []
+  const [confirm,  setConfirm]  = useState(false)
+  const allStops = entry.itinerary?.flatMap(d => d.stops) || []
 
   return (
     <div className="saved-card">
-      <div
-        className="saved-card__header"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <div className="saved-card__header" onClick={() => setExpanded(!expanded)}>
         <div>
-          <div className="saved-card__title">
-            {entry.location}
-          </div>
-
-          <div className="saved-card__meta">
-            Saved {entry.savedAt}
-          </div>
+          <div className="saved-card__title">{entry.location}</div>
+          <div className="saved-card__meta">Saved {entry.savedAt}</div>
         </div>
-
-        <span className="saved-card__badge">
-          {expanded ? '▲ Hide' : '▼ View'}
-        </span>
+        <span className="saved-card__badge">{expanded ? '▲ Hide' : '▼ View'}</span>
       </div>
 
       {!expanded && (
@@ -87,11 +74,8 @@ function SavedItineraryCard({ entry, onDelete }) {
               </div>
             ))}
           </div>
-
           {allStops.length > 3 && (
-            <div className="saved-card__more">
-              +{allStops.length - 3} more stops
-            </div>
+            <div className="saved-card__more">+{allStops.length - 3} more stops</div>
           )}
         </>
       )}
@@ -102,26 +86,17 @@ function SavedItineraryCard({ entry, onDelete }) {
             <div key={day.day} className="saved-detail-day">
               <div className="saved-detail-day__header">
                 <div className="saved-detail-day__label">
-                  Day {day.day}
-                  {day.date ? ` · ${day.date}` : ''}
+                  Day {day.day}{day.date ? ` · ${day.date}` : ''}
                 </div>
-
-                <button
-                  className="gmaps-btn"
-                  onClick={() => openInGoogleMaps(day.stops)}
-                >
+                <button className="gmaps-btn" onClick={() => openInGoogleMaps(day.stops)}>
                   Open in Google Maps
                 </button>
               </div>
-
               {day.stops.map((s, i) => (
                 <div key={i} className="saved-detail-stop">
                   {s.place?.name}
-
                   {s.arrival_time && (
-                    <span style={{ color: '#4a9bc5', marginLeft: 6 }}>
-                      {s.arrival_time}
-                    </span>
+                    <span style={{ color: '#4a9bc5', marginLeft: 6 }}>{s.arrival_time}</span>
                   )}
                 </div>
               ))}
@@ -132,35 +107,20 @@ function SavedItineraryCard({ entry, onDelete }) {
 
       <div className="saved-card__footer">
         <span className="saved-card__days">
-          {entry.tripDays} day
-          {entry.tripDays !== 1 ? 's' : ''} · {allStops.length} stops
+          {entry.tripDays} day{entry.tripDays !== 1 ? 's' : ''} · {allStops.length} stops
         </span>
-
         <div className="saved-card__actions">
-          <button
-            className="gmaps-btn"
-            onClick={() => openInGoogleMaps(allStops)}
-            disabled={allStops.length === 0}
-          >
+          <button className="gmaps-btn" onClick={() => openInGoogleMaps(allStops)} disabled={allStops.length === 0}>
             Open Trip in Google Maps
           </button>
-
-          <button
-            className="saved-card__delete"
-            onClick={() => setConfirm(true)}
-          >
-            Remove
-          </button>
+          <button className="saved-card__delete" onClick={() => setConfirm(true)}>Remove</button>
         </div>
       </div>
 
       {confirm && (
         <ConfirmDialog
           message={`Remove your itinerary for ${entry.location}?`}
-          onConfirm={() => {
-            setConfirm(false)
-            onDelete(entry.id)
-          }}
+          onConfirm={() => { setConfirm(false); onDelete(entry.id) }}
           onCancel={() => setConfirm(false)}
         />
       )}
@@ -170,16 +130,28 @@ function SavedItineraryCard({ entry, onDelete }) {
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user }  = useAuth()
+
+  const [isFirstVisit,  setIsFirstVisit]  = useState(() => localStorage.getItem('justCompletedSurvey') === 'true')
+  const [showToast,     setShowToast]     = useState(() => localStorage.getItem('justCompletedSurvey') === 'true')
+  const [showTooltip,   setShowTooltip]   = useState(() => localStorage.getItem('justCompletedSurvey') === 'true')
+
+  const handleAction = (path) => {
+    localStorage.removeItem('justCompletedSurvey')
+    setIsFirstVisit(false)
+    setShowTooltip(false)
+    navigate(path)
+  }
+
+  const dismissToast = () => {
+    setShowToast(false)
+    localStorage.removeItem('justCompletedSurvey')
+  }
 
   const [savedItineraries, setSavedItineraries] = useState(
     () => userStorage.get('savedItineraries') || []
   )
-
-  const [likedDests, setLikedDests] = useState(
-    () => userStorage.get('likedDestinations') || []
-  )
-
+  const [likedDests,  setLikedDests]  = useState(() => userStorage.get('likedDestinations') || [])
   const [confirmDest, setConfirmDest] = useState(null)
 
   const deleteItinerary = id => {
@@ -196,46 +168,44 @@ export default function HomePage() {
   }
 
   const firstName = user?.name?.split(' ')[0] || 'Traveler'
-
-  const hour = new Date().getHours()
-
-  const greeting =
-    hour < 12
-      ? 'Good morning'
-      : hour < 17
-      ? 'Good afternoon'
-      : 'Good evening'
+  const hour      = new Date().getHours()
+  const greeting  = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
     <div className="page">
-      <div className="home-container">
-        <div className="home__hero">
-          <h1>
-            {greeting}, {firstName}
-          </h1>
 
-          <p>
-            Ready for your next adventure? Let's make it unforgettable.
+      {showToast && <Toast message="" onDone={dismissToast} />}
+
+      <div className="home-container">
+
+        <div className="home__hero">
+          <h1>{greeting}, {firstName}!</h1>
+
+          <p className={isFirstVisit ? 'home__hero-subtitle--highlight' : ''}>
+            {isFirstVisit
+              ? "Your preferences are saved! Choose what you'd like to do below to get started."
+              : 'Ready for your next adventure? Let\'s make it unforgettable.'
+            }
           </p>
 
-          <div className="home__actions">
+          <div className="home__actions" style={{ position: 'relative' }}>
             <button
-              className="btn btn--primary"
-              onClick={() => navigate('/app/generate-itinerary')}
+              className={`btn btn--primary${isFirstVisit ? ' btn--pulse' : ''}`}
+              onClick={() => handleAction('/app/generate-itinerary')}
             >
               Generate Itinerary
             </button>
 
             <button
-              className="btn btn--secondary"
-              onClick={() => navigate('/app/generate-places')}
+              className={`btn btn--secondary${isFirstVisit ? ' btn--pulse' : ''}`}
+              onClick={() => handleAction('/app/generate-places')}
             >
               Discover Places
             </button>
 
             <button
-              className="btn btn--secondary"
-              onClick={() => navigate('/app/destination')}
+              className={`btn btn--secondary${isFirstVisit ? ' btn--pulse' : ''}`}
+              onClick={() => handleAction('/app/destination')}
             >
               Explore Destinations
             </button>
@@ -244,10 +214,10 @@ export default function HomePage() {
 
         <div className="stats-row">
           {[
-            ['Countries', '20'],
-            ['Days Planned', '40'],
-            ['Spent This Year', '$2,300'],
-            ['Trips Done', '5'],
+            ['Countries',      '20'],
+            ['Days Planned',   '40'],
+            ['Spent This Year','$2,300'],
+            ['Trips Done',     '5'],
           ].map(([label, val]) => (
             <div className="stats-card" key={label}>
               <span className="stats-card__val">{val}</span>
@@ -257,29 +227,19 @@ export default function HomePage() {
         </div>
 
         <h2 className="section-title">Saved Itineraries</h2>
-
         {savedItineraries.length === 0 ? (
-          <p className="section-empty">
-            No saved itineraries yet — generate one and save it!
-          </p>
+          <p className="section-empty">No saved itineraries yet — generate one and save it!</p>
         ) : (
           <div className="saved-list">
             {savedItineraries.map(entry => (
-              <SavedItineraryCard
-                key={entry.id}
-                entry={entry}
-                onDelete={deleteItinerary}
-              />
+              <SavedItineraryCard key={entry.id} entry={entry} onDelete={deleteItinerary} />
             ))}
           </div>
         )}
 
         <h2 className="section-title">Liked Destinations</h2>
-
         {likedDests.length === 0 ? (
-          <p className="section-empty">
-            No liked destinations yet; explore destinations to save them here!
-          </p>
+          <p className="section-empty">No liked destinations yet — explore destinations to save them here!</p>
         ) : (
           <div className="dest-list-home">
             {likedDests.map(dest => (
@@ -290,19 +250,11 @@ export default function HomePage() {
                     <div className="dest-chip__country">{dest.country}</div>
                   </div>
                 </div>
-
                 <div className="dest-chip__actions">
-                  <button
-                    className="gmaps-btn"
-                    onClick={() => openDestinationInGoogleMaps(dest)}
-                  >
+                  <button className="gmaps-btn" onClick={() => openDestinationInGoogleMaps(dest)}>
                     Open in Google Maps
                   </button>
-
-                  <button
-                    className="dest-chip__remove"
-                    onClick={() => setConfirmDest(dest)}
-                  >
+                  <button className="dest-chip__remove" onClick={() => setConfirmDest(dest)}>
                     Remove
                   </button>
                 </div>

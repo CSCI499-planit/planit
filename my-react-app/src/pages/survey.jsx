@@ -155,6 +155,8 @@ export default function SurveyPage() {
       console.error("Failed to save preferences to backend:", err.message);
     }
 
+    localStorage.setItem("justCompletedSurvey", "true");
+    
     if (answers.maps_history === "yes") {
       navigate("/upload");
     } else {
@@ -551,7 +553,7 @@ export default function SurveyPage() {
           </fieldset>
 
           <button type="submit" className="survey-btn">
-            Get Recommendations
+            Submit your preference survey!
           </button>
         </form>
       </div>
