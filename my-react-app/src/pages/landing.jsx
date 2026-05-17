@@ -307,6 +307,18 @@ export default function LandingPage() {
               </p>
             </div>
           </div>
+          <div className="learn-cta">
+              <p className="learn-cta__top">Get Started</p>
+              <h2 className="learn-cta__title">Your next trip starts here.</h2>
+              <p className="learn-cta__sub">
+                Join thousands of travelers who plan smarter with PlanIt.
+              </p>
+              <div className="learn-cta__actions">
+                <button className="btn btn--primary" onClick={() => navigate('/signup')}>
+                  Sign up now!
+                </button>
+              </div>
+            </div>
         </div>
       </section>
       
