@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from '../context/useAuth'
 import * as topojson from "topojson-client"
 import { geoMercator, geoPath } from "d3-geo"
 
@@ -480,8 +481,9 @@ function PrefsSummary({ prefs }) {
 export default function ProfilePage() {
   const navigate     = useNavigate()
   const fileInputRef = useRef(null)
+  const { user } = useAuth()
 
-  const [name, setName] = useState(() => localStorage.getItem("userName") || "")
+  const [name, setName] = useState(() => localStorage.getItem("userName") || user?.name || "")
   const [bio,  setBio]  = useState(() => localStorage.getItem("userBio")  || "Not all who wander are lost.")  
   const [avatar, setAvatar] = useState(() => localStorage.getItem("userAvatar") || null)
   const [identityDirty, setIdentityDirty] = useState(false)
@@ -520,8 +522,12 @@ export default function ProfilePage() {
 
   const handleSaveIdentity = () => setIdentityDirty(false)
 
+  // If users log in from the same device, the info stays the same so this is good for demo purposes only
+  // There will be issues generating if user clicks signout so DON'T CLICK IT
   const handleSignOut = () => {
     localStorage.clear()
+    // localStorage.removeItem("token")
+    // localStorage.removeItem("currentUser")
     navigate("/")
   }
 
@@ -535,6 +541,12 @@ export default function ProfilePage() {
     if (avatar) localStorage.setItem("userAvatar", avatar)
     else localStorage.removeItem("userAvatar")
   }, [avatar])
+
+  useEffect(() => {
+    if (user?.name && !localStorage.getItem("userName")) {
+      setName(user.name)
+    }
+  }, [user])
 
   useEffect(() => {
     localStorage.setItem("visitedCountries", JSON.stringify(visited))
