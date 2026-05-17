@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { apiUrl } from "../api/client";
 import "../components/upload.css";
 
+const takeoutGuideImage = `${import.meta.env.BASE_URL}takeout-guide.png`;
+
 function isGoogleTakeoutFile(data) {
   if (data.timelineObjects) return true;
   if (Array.isArray(data.features) && data.features.length > 0) {
@@ -133,7 +135,7 @@ export default function UploadPage() {
                 </button>
                 {showGuide && (
                   <img
-                    src="/takeout-guide.png"
+                    src={takeoutGuideImage}
                     alt="Maps (your places) selected in Google Takeout"
                     className="guide-img"
                   />
