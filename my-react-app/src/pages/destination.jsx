@@ -96,9 +96,22 @@ export default function DestinationPage() {
         {filtered.length === 0 ? <div className="dest-empty">No destinations match your search.</div> : filtered.map(d => (
           <div key={d.id} className="dest-card">
             <div className="dest-card__image-wrap">
-              <img className="dest-card__image" src={d.img} alt={d.name} loading="lazy" onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='flex' }} />
+              <img
+                className="dest-card__image"
+                src={d.img}
+                alt={d.name}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
+                onError={e => {
+                  e.target.style.display = 'none'
+                  const fallback = e.target.parentElement.querySelector('.dest-card__img-fallback')
+                  if (fallback) fallback.style.display = 'flex'
+                }}
+              />
               <div className="dest-card__img-fallback">{d.name}</div>
             </div>
+
             <div className="dest-card__body">
               <div className="dest-card__header">
                 <div className="dest-card__name">{d.name}</div>

@@ -11,6 +11,8 @@
   background-position: center;
   background-attachment: fixed;
   position: relative;
+  animation: fadeUp 0.5s ease both;
+
 }
 
 .dest-page::before {
@@ -126,10 +128,11 @@
   display: none;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.025);
-  color: rgba(220, 233, 245, 0.5);
-  font-size: 0.85rem;
-  font-weight: 500;
+  background: linear-gradient(135deg, rgba(0,217,255,0.1), rgba(79,124,255,0.1));
+  color: rgba(220, 233, 245, 0.7);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .dest-card__body {

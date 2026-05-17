@@ -481,7 +481,7 @@ export default function ProfilePage() {
   const navigate     = useNavigate()
   const fileInputRef = useRef(null)
 
-  const [name, setName] = useState(() => localStorage.getItem("userName") || "Dask Lanb")
+  const [name, setName] = useState(() => localStorage.getItem("userName") || "")
   const [bio,  setBio]  = useState(() => localStorage.getItem("userBio")  || "Not all who wander are lost.")  
   const [avatar, setAvatar] = useState(() => localStorage.getItem("userAvatar") || null)
   const [identityDirty, setIdentityDirty] = useState(false)
